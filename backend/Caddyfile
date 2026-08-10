@@ -1,0 +1,28 @@
+# Replace with your DuckDNS subdomain before deploying with Caddy.
+# DuckDNS setup: https://www.duckdns.org/
+#   1. Create account, add subdomain (e.g. signalapp)
+#   2. Point subdomain to your Oracle VM public IP
+#   3. Replace signalapp.duckdns.org below
+#
+# Start with HTTPS:
+#   docker compose --profile https up -d
+#
+# HTTP-only (no Caddy):
+#   docker compose up -d api
+
+signalapp.duckdns.org {
+    reverse_proxy api:8000
+
+    encode gzip
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+    }
+}
+
+# Optional: expose API directly on port 8000 without TLS (dev / testing)
+# :8000 {
+#     reverse_proxy api:8000
+# }

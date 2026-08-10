@@ -1,0 +1,29 @@
+# Core runtime (SQLite single-VM deploy)
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+aiosqlite==0.20.0
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+smartapi-python==1.5.5
+logzero==1.7.0
+websocket-client==1.8.0
+pyotp==2.9.0
+httpx==0.28.1
+apscheduler==3.10.4
+pytest==8.3.4
+
+# Analytics / signal / backtest
+# All have pre-built aarch64 wheels on PyPI except vectorbt may pull numba.
+numpy==2.2.3
+pandas==2.2.3
+pandas-ta==0.3.14b0
+scipy==1.15.2
+# vectorbt is optional — heavy; uncomment when backtest service is built:
+# vectorbt==0.26.2
+
+# ARM64 notes (Oracle Cloud Ubuntu 22.04):
+# - numpy, pandas, scipy, aiosqlite: binary wheels available for aarch64
+# - pandas-ta: pure Python, no compile needed
+# - vectorbt/numba: may need build-essential if wheel unavailable
+#   apt-get install -y build-essential gcc g++ python3-dev
