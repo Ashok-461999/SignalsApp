@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -15,7 +15,7 @@ class Candle(Base):
         Index("ix_candles_lookup", "instrument", "segment", "interval", "timestamp"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     instrument: Mapped[str] = mapped_column(String(32), nullable=False)
     exchange: Mapped[str] = mapped_column(String(8), nullable=False)
     segment: Mapped[str] = mapped_column(String(16), nullable=False, default="spot")
@@ -35,7 +35,7 @@ class BacktestResult(Base):
     __tablename__ = "backtest_results"
     __table_args__ = (Index("ix_backtest_lookup", "setup_name", "instrument", "created_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     setup_name: Mapped[str] = mapped_column(String(64), nullable=False)
     instrument: Mapped[str] = mapped_column(String(32), nullable=False)
     segment: Mapped[str] = mapped_column(String(16), nullable=False, default="spot")
@@ -59,7 +59,7 @@ class JournalEntry(Base):
     __tablename__ = "journal_entries"
     __table_args__ = (Index("ix_journal_created", "created_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     setup_name: Mapped[str] = mapped_column(String(64), nullable=False)
     instrument: Mapped[str] = mapped_column(String(32), nullable=False)
     segment: Mapped[str] = mapped_column(String(16), nullable=False, default="spot")
@@ -87,7 +87,7 @@ class JournalEntry(Base):
 class SignalLog(Base):
     __tablename__ = "signal_logs"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     setup_name: Mapped[str] = mapped_column(String(64), nullable=False)
     instrument: Mapped[str] = mapped_column(String(32), nullable=False)
     segment: Mapped[str] = mapped_column(String(16), nullable=False, default="spot")

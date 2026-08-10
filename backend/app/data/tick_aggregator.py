@@ -80,7 +80,7 @@ def _persist_candle(session: Session, candle: FormingCandle) -> None:
         "close": candle.close,
         "volume": candle.volume,
     }
-    stmt = dialect_insert(Candle).values(record)
+    stmt = dialect_insert(Candle.__table__).values(record)
     stmt = upsert_do_nothing(
         stmt,
         constraint="uq_candle",

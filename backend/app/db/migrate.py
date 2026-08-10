@@ -1,4 +1,3 @@
-import json
 import logging
 
 from sqlalchemy import inspect, text
@@ -10,12 +9,22 @@ logger = logging.getLogger(__name__)
 
 def migrate_schema() -> None:
     """Lightweight schema migration — SQLite compatible."""
+    dialect = sync_engine.dialect.name
+
+    if dialect == "sqlite":
+        with sync_engine.begin() as conn:
+            row = conn.execute(
+                text("SELECT sql FROM sqlite_master WHERE name='candles'")
+            ).fetchone()
+            if row and row[0] and "BIGINT" in row[0].upper():
+                logger.warning("Recreating candles table — SQLite needs INTEGER autoincrement PK")
+                conn.execute(text("DROP TABLE IF EXISTS candles"))
+
     inspector = inspect(sync_engine)
     if not inspector.has_table("candles"):
         return
 
     columns = {col["name"] for col in inspector.get_columns("candles")}
-    dialect = sync_engine.dialect.name
 
     with sync_engine.begin() as conn:
         if "segment" not in columns:
