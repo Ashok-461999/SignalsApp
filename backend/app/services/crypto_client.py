@@ -123,7 +123,7 @@ class CryptoClient:
         pairs = [w["pair"] for w in CRYPTO_WATCHLIST]
         r = httpx.get(
             "https://api.binance.com/api/v3/ticker/24hr",
-            params={"symbols": json.dumps(pairs)},
+            params={"symbols": json.dumps(pairs, separators=(",", ":"))},
             timeout=15,
         )
         r.raise_for_status()
