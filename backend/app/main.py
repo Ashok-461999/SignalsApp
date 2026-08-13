@@ -17,7 +17,7 @@ from app.api.routes import (
     live_candles,
     market,
     monitoring,
-    settings,
+    settings as settings_routes,
     setups,
     signals,
     signals_ws,
