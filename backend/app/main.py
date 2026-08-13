@@ -116,7 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(iv.router)
     app.include_router(journal.router)
     app.include_router(market.router)
-    app.include_router(settings.router)
+    app.include_router(settings_routes.router)
     app.include_router(crypto.router)
     app.include_router(execution_router)
     return app
