@@ -206,6 +206,16 @@ class ApiService {
     });
     return r.data!;
   }
+
+  Future<Map<String, dynamic>> getTradingSettings() async {
+    final r = await _dio.get<Map<String, dynamic>>('/settings/trading');
+    return r.data!;
+  }
+
+  Future<Map<String, dynamic>> updateTradingSettings(Map<String, dynamic> data) async {
+    final r = await _dio.patch<Map<String, dynamic>>('/settings/trading', data: data);
+    return r.data!;
+  }
 }
 
 class SignalWebSocket {

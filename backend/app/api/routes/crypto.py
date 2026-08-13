@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.config import get_settings
+
 from app.db.session import get_sync_session
 from app.services.crypto_client import CRYPTO_WATCHLIST, CryptoClient
 from app.services.crypto_store import (
@@ -14,6 +14,7 @@ from app.services.crypto_store import (
     save_credentials,
 )
 from app.services.crypto_store import CryptoCredentials as StoredCredentials
+from app.services.trading_settings import load_trading_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/crypto", tags=["crypto"])
@@ -154,7 +155,7 @@ def crypto_trades(
 def crypto_place_order(
     body: PlaceOrderBody, session: Session = Depends(get_sync_session)
 ) -> dict:
-    settings = get_settings()
+    settings = load_trading_settings(session)
     if settings.kill_switch:
         raise HTTPException(403, "Kill switch active — crypto orders disabled")
     if not body.confirm:
@@ -163,7 +164,7 @@ def crypto_place_order(
     creds = load_credentials(session)
     paper = settings.crypto_paper_trading or not creds or not creds.is_configured
     if not paper and not settings.crypto_live_enabled:
-        raise HTTPException(403, "Live crypto trading not enabled on server")
+        raise HTTPException(403, "Enable live crypto trading in Settings first")
 
     client = CryptoClient(creds)
     try:

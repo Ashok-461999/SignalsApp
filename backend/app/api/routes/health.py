@@ -20,6 +20,7 @@ from app.data.smartapi_client import smartapi_client
 from app.data.websocket_feed import live_feed_service
 from app.db.session import SyncSessionLocal, get_async_session
 from app.services.crypto_store import credentials_status, load_credentials
+from app.services.trading_settings import load_trading_settings, trading_settings_dict
 
 
 
@@ -63,6 +64,7 @@ async def health(session: AsyncSession = Depends(get_async_session)) -> dict:
     try:
         crypto_creds = load_credentials(sync_session)
         crypto_status = credentials_status(crypto_creds)
+        trading = trading_settings_dict(load_trading_settings(sync_session))
     finally:
         sync_session.close()
 
@@ -96,23 +98,7 @@ async def health(session: AsyncSession = Depends(get_async_session)) -> dict:
 
         "data_layer": DATA_LAYER_STATUS,
 
-        "trading": {
-
-            "paper_trading": settings.paper_trading,
-
-            "live_execution_enabled": settings.live_execution_enabled,
-
-            "kill_switch": settings.kill_switch,
-
-            "execution_allowed": settings.execution_allowed,
-
-            "risk_percent": settings.risk_percent,
-
-            "crypto_paper_trading": settings.crypto_paper_trading,
-
-            "crypto_live_enabled": settings.crypto_live_enabled,
-
-        },
+        "trading": trading,
 
         "crypto": crypto_status,
 

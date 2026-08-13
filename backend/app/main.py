@@ -17,6 +17,7 @@ from app.api.routes import (
     live_candles,
     market,
     monitoring,
+    settings,
     setups,
     signals,
     signals_ws,
@@ -115,6 +116,7 @@ def create_app() -> FastAPI:
     app.include_router(iv.router)
     app.include_router(journal.router)
     app.include_router(market.router)
+    app.include_router(settings.router)
     app.include_router(crypto.router)
     app.include_router(execution_router)
     return app

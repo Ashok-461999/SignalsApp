@@ -115,6 +115,10 @@ class NotificationsEnabledNotifier extends StateNotifier<bool> {
 
 final healthProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getHealth());
 
+final tradingSettingsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  return ref.watch(apiServiceProvider).getTradingSettings();
+});
+
 final setupsProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getSetups());
 
 final journalProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getJournal());

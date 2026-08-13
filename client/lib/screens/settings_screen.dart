@@ -154,6 +154,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Future<void> _updateTradingSetting(String key, bool value, {bool confirmLive = false}) async {
+    if (confirmLive && value) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Enable live trading?'),
+          content: const Text(
+            'Real money orders will be sent to the exchange. '
+            'Make sure API keys and risk limits are correct.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Enable')),
+          ],
+        ),
+      );
+      if (ok != true) return;
+    }
+    try {
+      await ref.read(apiServiceProvider).updateTradingSettings({key: value});
+      ref.invalidate(tradingSettingsProvider);
+      ref.invalidate(healthProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Trading settings updated')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+    }
+  }
+
   Future<void> _clearCryptoKeys() async {
     try {
       await ref.read(apiServiceProvider).clearCryptoCredentials();
@@ -175,6 +207,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final notifEnabled = ref.watch(notificationsEnabledProvider);
     final aiEnabled = ref.watch(aiAnalysisEnabledProvider);
     final cryptoCreds = ref.watch(cryptoCredentialsProvider);
+    final tradingSettings = ref.watch(tradingSettingsProvider);
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -187,6 +220,60 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: const Text('Alert on TAKE — entry, stop, target'),
           value: notifEnabled,
           onChanged: (v) => ref.read(notificationsEnabledProvider.notifier).setEnabled(v),
+        ),
+        const Divider(),
+        Text('Trading modes', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        const Text(
+          'Control paper vs live trading on your backend server.',
+          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 8),
+        tradingSettings.when(
+          data: (t) => Column(
+            children: [
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Kill switch'),
+                subtitle: const Text('Emergency stop — blocks all orders'),
+                value: t['kill_switch'] as bool? ?? false,
+                onChanged: (v) => _updateTradingSetting('kill_switch', v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Indian paper trading'),
+                subtitle: const Text('Simulate options orders (no real money)'),
+                value: t['paper_trading'] as bool? ?? true,
+                onChanged: (v) => _updateTradingSetting('paper_trading', v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Indian live trading'),
+                subtitle: const Text('Send real SmartAPI orders'),
+                value: t['live_execution_enabled'] as bool? ?? false,
+                onChanged: (v) => _updateTradingSetting('live_execution_enabled', v, confirmLive: true),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Crypto paper trading'),
+                subtitle: const Text('Simulate crypto buy/sell'),
+                value: t['crypto_paper_trading'] as bool? ?? true,
+                onChanged: (v) => _updateTradingSetting('crypto_paper_trading', v),
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Crypto live trading'),
+                subtitle: const Text('Send real orders to your exchange'),
+                value: t['crypto_live_enabled'] as bool? ?? false,
+                onChanged: (v) => _updateTradingSetting('crypto_live_enabled', v, confirmLive: true),
+              ),
+            ],
+          ),
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(),
+          ),
+          error: (e, _) => Text('Trading settings: $e', style: const TextStyle(color: AppColors.loss)),
         ),
         const Divider(),
         Text('Crypto exchange API', style: Theme.of(context).textTheme.titleMedium),
@@ -333,8 +420,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Backend status', style: Theme.of(context).textTheme.titleSmall),
-                Text('Paper trading: ${trading['paper_trading']}'),
-                Text('Crypto paper: ${trading['crypto_paper_trading']}'),
+                Text('Indian: ${trading['paper_trading'] == true ? 'paper' : 'live'}'),
+                Text('Crypto: ${trading['crypto_paper_trading'] == true ? 'paper' : 'live'}'),
                 Text('Crypto keys: ${crypto['configured'] == true ? 'configured' : 'not set'}'),
                 Text('Kill switch: ${trading['kill_switch']}'),
               ],
