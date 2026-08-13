@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     kill_switch: bool = False
     risk_percent: float = 1.0
 
+    # Crypto — keys stored encrypted in DB; Claude key stays on phone only
+    crypto_storage_secret: str = ""
+    crypto_paper_trading: bool = True
+    crypto_live_enabled: bool = False
+
     # Signals — set false to fire on setup detection without backtest validation
     require_backtest_for_signals: bool = False
 

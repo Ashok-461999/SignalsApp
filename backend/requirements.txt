@@ -10,6 +10,7 @@ logzero==1.7.0
 websocket-client==1.8.0
 pyotp==2.9.0
 httpx==0.28.1
+cryptography==44.0.0
 apscheduler==3.10.4
 pytest==8.3.4
 

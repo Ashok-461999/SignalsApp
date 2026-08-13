@@ -1,4 +1,4 @@
-FROM python:3.11-slim-bookworm
+FROM python:3.12-slim-bookworm
 
 # Build deps for any packages without aarch64 wheels (scipy/numba fallback compile)
 RUN apt-get update && apt-get install -y --no-install-recommends \

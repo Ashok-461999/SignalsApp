@@ -9,11 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import (
     backtest,
     candles,
+    crypto,
     gaps,
     health,
     iv,
     journal,
     live_candles,
+    market,
     monitoring,
     setups,
     signals,
@@ -112,6 +114,8 @@ def create_app() -> FastAPI:
     app.include_router(backtest.router)
     app.include_router(iv.router)
     app.include_router(journal.router)
+    app.include_router(market.router)
+    app.include_router(crypto.router)
     app.include_router(execution_router)
     return app
 

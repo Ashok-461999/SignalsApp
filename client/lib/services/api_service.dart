@@ -56,6 +56,12 @@ class ApiService {
     return r.data!;
   }
 
+  Future<List<Map<String, dynamic>>> getMarketNews({int limit = 12}) async {
+    final r = await _dio.get<Map<String, dynamic>>('/market/news', queryParameters: {'limit': limit});
+    final headlines = r.data?['headlines'] as List<dynamic>? ?? [];
+    return headlines.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
   Future<JournalEntry> approveSignal(SignalModel signal) async {
     final r = await _dio.post<Map<String, dynamic>>('/journal', data: {
       'setup_name': signal.setupName,
@@ -92,6 +98,113 @@ class ApiService {
   Future<JournalEntry> updateJournal(int id, Map<String, dynamic> data) async {
     final r = await _dio.patch<Map<String, dynamic>>('/journal/$id', data: data);
     return JournalEntry.fromJson(r.data!);
+  }
+
+  // --- Crypto (keys stored on backend; Claude key stays on phone) ---
+
+  Future<Map<String, dynamic>> getCryptoCredentialsStatus() async {
+    final r = await _dio.get<Map<String, dynamic>>('/crypto/credentials');
+    return r.data!;
+  }
+
+  Future<Map<String, dynamic>> saveCryptoCredentials({
+    required String exchange,
+    required String apiKey,
+    required String apiSecret,
+    String passphrase = '',
+  }) async {
+    final r = await _dio.put<Map<String, dynamic>>('/crypto/credentials', data: {
+      'exchange': exchange,
+      'api_key': apiKey,
+      'api_secret': apiSecret,
+      'passphrase': passphrase,
+    });
+    return r.data!;
+  }
+
+  Future<void> clearCryptoCredentials() async {
+    await _dio.delete('/crypto/credentials');
+  }
+
+  Future<String> testCryptoCredentials({
+    required String exchange,
+    required String apiKey,
+    required String apiSecret,
+    String passphrase = '',
+  }) async {
+    final r = await _dio.post<Map<String, dynamic>>('/crypto/credentials/test', data: {
+      'exchange': exchange,
+      'api_key': apiKey,
+      'api_secret': apiSecret,
+      'passphrase': passphrase,
+    });
+    return r.data?['message'] as String? ?? 'Connected';
+  }
+
+  Future<List<Map<String, dynamic>>> getCryptoPrices() async {
+    final r = await _dio.get<Map<String, dynamic>>('/crypto/prices');
+    final prices = r.data?['prices'] as List<dynamic>? ?? [];
+    return prices.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<CandlesResponse> getCryptoCandles({
+    required String symbol,
+    String interval = '5m',
+    int limit = 120,
+  }) async {
+    final r = await _dio.get<Map<String, dynamic>>('/crypto/candles', queryParameters: {
+      'symbol': symbol,
+      'interval': interval,
+      'limit': limit,
+    });
+    final raw = r.data?['candles'] as List<dynamic>? ?? [];
+    final candles = raw
+        .map((c) => Candle.fromJson({
+              'timestamp': DateTime.fromMillisecondsSinceEpoch((c['timestamp'] as num).toInt()).toIso8601String(),
+              'open': c['open'],
+              'high': c['high'],
+              'low': c['low'],
+              'close': c['close'],
+              'volume': c['volume'] ?? 0,
+            }))
+        .toList();
+    return CandlesResponse(
+      instrument: symbol,
+      interval: interval,
+      count: candles.length,
+      candles: candles,
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getCryptoBalances() async {
+    final r = await _dio.get<Map<String, dynamic>>('/crypto/balances');
+    final balances = r.data?['balances'] as List<dynamic>? ?? [];
+    return balances.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> getCryptoTrades({String symbol = 'BTC', int limit = 20}) async {
+    final r = await _dio.get<Map<String, dynamic>>('/crypto/trades', queryParameters: {
+      'symbol': symbol,
+      'limit': limit,
+    });
+    final trades = r.data?['trades'] as List<dynamic>? ?? [];
+    return trades.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<Map<String, dynamic>> placeCryptoOrder({
+    required String symbol,
+    required String side,
+    required double quantity,
+    bool confirm = true,
+  }) async {
+    final r = await _dio.post<Map<String, dynamic>>('/crypto/orders', data: {
+      'symbol': symbol,
+      'side': side,
+      'quantity': quantity,
+      'order_type': 'MARKET',
+      'confirm': confirm,
+    });
+    return r.data!;
   }
 }
 

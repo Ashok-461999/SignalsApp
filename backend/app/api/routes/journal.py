@@ -2,11 +2,12 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.data.models import JournalEntry
+from app.api.routes.journal_stats import build_journal_summary, calc_option_pnl
 from app.db.session import get_sync_session
 
 router = APIRouter(prefix="/journal", tags=["journal"])
@@ -90,17 +91,10 @@ def list_journal(session: Session = Depends(get_sync_session)) -> dict:
         select(JournalEntry).order_by(JournalEntry.created_at.desc()).limit(200)
     ).scalars().all()
     entries = [_to_out(r) for r in rows]
-    closed = [e for e in entries if e.pnl is not None]
-    total_pnl = sum(e.pnl for e in closed if e.pnl)
-    wins = len([e for e in closed if e.pnl and e.pnl > 0])
     return {
         "count": len(entries),
         "entries": entries,
-        "summary": {
-            "total_pnl": round(total_pnl, 2),
-            "closed_trades": len(closed),
-            "win_rate": round(wins / len(closed) * 100, 1) if closed else 0,
-        },
+        "summary": build_journal_summary(entries),
     }
 
 
@@ -139,8 +133,19 @@ def update_journal(
     entry = session.get(JournalEntry, entry_id)
     if not entry:
         raise HTTPException(404, "Journal entry not found")
-    for field, value in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    for field, value in updates.items():
         setattr(entry, field, value)
+
+    fill = entry.actual_fill_price
+    exit_p = entry.exit_price
+    if entry.pnl is None and fill is not None and exit_p is not None:
+        entry.pnl = calc_option_pnl(
+            fill, exit_p, entry.instrument, entry.planned_size or 1
+        )
+        if entry.status not in ("rejected", "closed"):
+            entry.status = "closed"
+
     entry.updated_at = datetime.now(timezone.utc)
     session.commit()
     session.refresh(entry)

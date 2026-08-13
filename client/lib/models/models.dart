@@ -106,6 +106,7 @@ class JournalEntry {
   final double? exitPrice;
   final double? pnl;
   final String notes;
+  final String? createdAt;
 
   JournalEntry({
     required this.id,
@@ -123,6 +124,7 @@ class JournalEntry {
     this.exitPrice,
     this.pnl,
     required this.notes,
+    this.createdAt,
   });
 
   factory JournalEntry.fromJson(Map<String, dynamic> json) => JournalEntry(
@@ -143,5 +145,57 @@ class JournalEntry {
         exitPrice: (json['exit_price'] as num?)?.toDouble(),
         pnl: (json['pnl'] as num?)?.toDouble(),
         notes: json['notes'] as String? ?? '',
+        createdAt: json['created_at'] as String?,
+      );
+}
+
+class JournalSummary {
+  final double totalPnl;
+  final double todayPnl;
+  final double weekPnl;
+  final int closedTrades;
+  final int openTrades;
+  final int wins;
+  final int losses;
+  final double winRate;
+  final double avgWin;
+  final double avgLoss;
+  final double largestWin;
+  final double largestLoss;
+  final double? profitFactor;
+  final double expectancy;
+
+  JournalSummary({
+    required this.totalPnl,
+    required this.todayPnl,
+    required this.weekPnl,
+    required this.closedTrades,
+    required this.openTrades,
+    required this.wins,
+    required this.losses,
+    required this.winRate,
+    required this.avgWin,
+    required this.avgLoss,
+    required this.largestWin,
+    required this.largestLoss,
+    this.profitFactor,
+    required this.expectancy,
+  });
+
+  factory JournalSummary.fromJson(Map<String, dynamic> json) => JournalSummary(
+        totalPnl: (json['total_pnl'] as num?)?.toDouble() ?? 0,
+        todayPnl: (json['today_pnl'] as num?)?.toDouble() ?? 0,
+        weekPnl: (json['week_pnl'] as num?)?.toDouble() ?? 0,
+        closedTrades: json['closed_trades'] as int? ?? 0,
+        openTrades: json['open_trades'] as int? ?? 0,
+        wins: json['wins'] as int? ?? 0,
+        losses: json['losses'] as int? ?? 0,
+        winRate: (json['win_rate'] as num?)?.toDouble() ?? 0,
+        avgWin: (json['avg_win'] as num?)?.toDouble() ?? 0,
+        avgLoss: (json['avg_loss'] as num?)?.toDouble() ?? 0,
+        largestWin: (json['largest_win'] as num?)?.toDouble() ?? 0,
+        largestLoss: (json['largest_loss'] as num?)?.toDouble() ?? 0,
+        profitFactor: (json['profit_factor'] as num?)?.toDouble(),
+        expectancy: (json['expectancy'] as num?)?.toDouble() ?? 0,
       );
 }

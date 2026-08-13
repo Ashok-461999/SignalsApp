@@ -52,16 +52,19 @@ class HealthResponse {
   final String status;
   final Map<String, dynamic> database;
   final Map<String, dynamic>? trading;
+  final Map<String, dynamic>? crypto;
 
   const HealthResponse({
     required this.status,
     required this.database,
     this.trading,
+    this.crypto,
   });
 
   factory HealthResponse.fromJson(Map<String, dynamic> json) => HealthResponse(
         status: json['status'] as String,
         database: Map<String, dynamic>.from(json['database'] as Map),
         trading: json['trading'] != null ? Map<String, dynamic>.from(json['trading'] as Map) : null,
+        crypto: json['crypto'] != null ? Map<String, dynamic>.from(json['crypto'] as Map) : null,
       );
 }
