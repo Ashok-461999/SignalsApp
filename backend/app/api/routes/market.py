@@ -5,7 +5,9 @@ from app.db.session import get_sync_session
 from app.services.gift_nifty import build_gift_nifty_insight
 from app.services.market_news import get_enriched_headlines, get_market_headlines
 from app.services.market_predictions import aggregate_predictions, enrich_headlines
+from app.services.market_session import build_market_session, build_trader_brief
 from app.services.move_predictions import build_move_targets, merge_predictions_with_moves
+from app.signals.scanner import signal_scanner
 
 router = APIRouter(prefix="/market", tags=["market"])
 
@@ -21,6 +23,24 @@ def market_news(limit: int = 12, enriched: bool = Query(False)) -> dict:
     return {"count": len(items), "headlines": items}
 
 
+@router.get("/session")
+def market_session() -> dict:
+    """IST session clock, next 5m bar, FII/DII, trader tips."""
+    return build_market_session()
+
+
+@router.get("/brief")
+def trader_brief(session: Session = Depends(get_sync_session)) -> dict:
+    """Today's trader brief — pain points + action items."""
+    gift = build_gift_nifty_insight(session)
+    regimes = {
+        inst: signal_scanner.get_regime(inst)
+        for inst in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX")
+        if signal_scanner.get_regime(inst)
+    }
+    return build_trader_brief(gift, regimes)
+
+
 @router.get("/gift-nifty")
 def gift_nifty(session: Session = Depends(get_sync_session)) -> dict:
     """GIFT Nifty overnight cue and Nifty 50 open probability."""
@@ -34,6 +54,12 @@ def market_predictions(
 ) -> dict:
     headlines = get_enriched_headlines(max_items=min(limit, 40))
     gift = build_gift_nifty_insight(session)
+    session_info = build_market_session()
+    brief = build_trader_brief(gift, {
+        inst: signal_scanner.get_regime(inst)
+        for inst in ("NIFTY", "BANKNIFTY", "FINNIFTY", "SENSEX")
+        if signal_scanner.get_regime(inst)
+    })
     news_predictions = aggregate_predictions(headlines)
     move_targets = build_move_targets(session, headlines, gift_insight=gift)
     predictions = merge_predictions_with_moves(news_predictions, move_targets)
@@ -43,6 +69,8 @@ def market_predictions(
         "move_targets": move_targets,
         "headlines": headlines,
         "gift_nifty": gift,
+        "market_session": session_info,
+        "trader_brief": brief,
         "disclaimer": (
             "GIFT Nifty negative close → ~74% Nifty open-down (empirical). "
             "Confirm with TAKE signals."

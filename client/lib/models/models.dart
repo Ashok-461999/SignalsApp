@@ -70,6 +70,32 @@ class SignalModel {
     return suggestedExpiry;
   }
 
+  int get signalAgeMinutes {
+    if (timestamp.isEmpty) return 0;
+    try {
+      final ts = DateTime.parse(timestamp).toLocal();
+      return DateTime.now().difference(ts).inMinutes;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  bool get isStale => signalAgeMinutes > 10;
+
+  String? get ivWarning =>
+      ivPercentile >= 80 ? 'IV ${ivPercentile.toStringAsFixed(0)}% high — premium crush risk' : null;
+
+  String? get dteWarning => daysToExpiry > 0 && daysToExpiry < 20
+      ? 'Only $daysToExpiry DTE — prefer 20+ days for your style'
+      : null;
+
+  String? get freshnessLabel {
+    if (timestamp.isEmpty) return null;
+    if (signalAgeMinutes <= 5) return 'Fresh · $signalAgeMinutes min ago';
+    if (signalAgeMinutes <= 15) return '$signalAgeMinutes min ago';
+    return 'Stale · $signalAgeMinutes min ago — wait for new 5m bar';
+  }
+
   static int _daysFromExpiryString(String expiry) {
     if (expiry.isEmpty) return 0;
     try {

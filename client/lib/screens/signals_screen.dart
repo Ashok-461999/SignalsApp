@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
@@ -304,7 +305,21 @@ class _SignalCard extends StatelessWidget {
                   ),
                   child: Text(d, style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 12)),
                 ),
-                const Spacer(),
+                if (signal.freshnessLabel != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      signal.freshnessLabel!,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: signal.isStale ? AppColors.warn : AppColors.textMuted,
+                        fontWeight: signal.isStale ? FontWeight.w700 : FontWeight.normal,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
                 if (signal.regime.isNotEmpty)
                   Text(signal.regime, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ],
@@ -346,6 +361,23 @@ class _SignalCard extends StatelessWidget {
                         'Est. premium ~₹${signal.entryPremiumEstimate.toStringAsFixed(0)} · ${signal.positionSize} lots',
                         style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                       ),
+                    if (signal.ivWarning != null)
+                      Text(signal.ivWarning!, style: const TextStyle(fontSize: 11, color: AppColors.warn)),
+                    if (signal.dteWarning != null)
+                      Text(signal.dteWarning!, style: const TextStyle(fontSize: 11, color: AppColors.warn)),
+                    if (signal.tradeDecision == 'TAKE' && signal.brokerOrderHint.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: signal.brokerOrderHint));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Copied — paste in your broker app')),
+                          );
+                        },
+                        icon: const Icon(Icons.copy_rounded, size: 16),
+                        label: const Text('Copy order'),
+                      ),
+                    ],
                   ],
                 ),
               ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/market_session.dart';
 import '../models/market_mode.dart';
 import '../models/news_intel.dart';
 import '../providers/app_providers.dart';
@@ -30,6 +31,9 @@ class WatchlistScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final health = ref.watch(healthProvider);
     final predictions = ref.watch(predictionBySymbolProvider);
+    final intel = ref.watch(marketIntelProvider);
+    final brief = intel.maybeWhen(data: (d) => d.traderBrief, orElse: () => const TraderBrief());
+    final session = intel.maybeWhen(data: (d) => d.marketSession, orElse: () => const MarketSessionInfo());
 
     return RefreshIndicator(
       onRefresh: () async => _refresh(ref),
@@ -45,6 +49,8 @@ class WatchlistScreen extends ConsumerWidget {
                   serverOk: h.status == 'ok',
                   smartApiOk: smartOk,
                   paperMode: paper,
+                  session: session.istTime.isNotEmpty ? session : brief.session,
+                  brief: brief.headline.isNotEmpty ? brief : null,
                   onRetry: () => _refresh(ref),
                 );
               },
@@ -153,7 +159,7 @@ class WatchlistScreen extends ConsumerWidget {
               Text(outlook.prediction, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
             ] else
               const Text(
-                'No live headlines matched this stock yet. Check Intel tab for market-wide news.',
+                'No live headlines matched this stock yet. Check News tab for market-wide headlines.',
                 style: TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
             const SizedBox(height: 12),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
@@ -58,6 +59,17 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
                 children: [
                   const Text('Place in broker', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                   Text(s.brokerOrderHint, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.profit)),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: s.brokerOrderHint));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Order copied — open your broker app')),
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 18),
+                    label: const Text('Copy to broker'),
+                  ),
                   if (s.entryPremiumEstimate > 0)
                     Text(
                       'Est. premium ~₹${s.entryPremiumEstimate.toStringAsFixed(0)} per unit · IV ${s.ivPercentile.toStringAsFixed(0)}%',

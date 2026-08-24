@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../models/market_session.dart';
 import '../models/news_intel.dart';
 import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
@@ -56,7 +57,13 @@ class _NewsIntelScreenState extends ConsumerState<NewsIntelScreen> {
           slivers: [
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: _TraderBriefCard(brief: data.traderBrief, session: data.marketSession),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 0),
                 child: Row(
                   children: [
                     const Expanded(
@@ -187,6 +194,53 @@ class _NewsIntelScreenState extends ConsumerState<NewsIntelScreen> {
             const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TraderBriefCard extends StatelessWidget {
+  const _TraderBriefCard({required this.brief, required this.session});
+  final TraderBrief brief;
+  final MarketSessionInfo session;
+
+  @override
+  Widget build(BuildContext context) {
+    final headline = brief.headline.isNotEmpty ? brief.headline : session.phaseLabel;
+    if (headline.isEmpty) return const SizedBox.shrink();
+
+    return AlphaSurface(
+      accent: AppColors.accent,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(headline, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          if (brief.actionItems.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...brief.actionItems.take(3).map(
+                  (a) => Padding(
+                    padding: const EdgeInsets.only(bottom: 3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('→ ', style: TextStyle(color: AppColors.accent, fontSize: 12)),
+                        Expanded(child: Text(a, style: const TextStyle(fontSize: 12, height: 1.3))),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
+          if (brief.painPoints.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              brief.painPoints.first,
+              style: const TextStyle(fontSize: 11, color: AppColors.warn, height: 1.3),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ],
       ),
     );
   }

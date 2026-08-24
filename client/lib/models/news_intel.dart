@@ -1,3 +1,5 @@
+import 'market_session.dart';
+
 class NewsHeadline {
   const NewsHeadline({
     required this.source,
@@ -157,12 +159,16 @@ class MarketIntelResponse {
     required this.headlines,
     this.disclaimer = '',
     this.giftNifty = const GiftNiftyInsight(),
+    this.marketSession = const MarketSessionInfo(),
+    this.traderBrief = const TraderBrief(),
   });
 
   final List<SymbolPrediction> predictions;
   final List<NewsHeadline> headlines;
   final String disclaimer;
   final GiftNiftyInsight giftNifty;
+  final MarketSessionInfo marketSession;
+  final TraderBrief traderBrief;
 
   factory MarketIntelResponse.fromJson(Map<String, dynamic> json) => MarketIntelResponse(
         predictions: (json['predictions'] as List<dynamic>? ?? [])
@@ -174,6 +180,12 @@ class MarketIntelResponse {
         disclaimer: json['disclaimer'] as String? ?? '',
         giftNifty: GiftNiftyInsight.fromJson(
           json['gift_nifty'] is Map ? Map<String, dynamic>.from(json['gift_nifty'] as Map) : null,
+        ),
+        marketSession: MarketSessionInfo.fromJson(
+          json['market_session'] is Map ? Map<String, dynamic>.from(json['market_session'] as Map) : null,
+        ),
+        traderBrief: TraderBrief.fromJson(
+          json['trader_brief'] is Map ? Map<String, dynamic>.from(json['trader_brief'] as Map) : null,
         ),
       );
 }

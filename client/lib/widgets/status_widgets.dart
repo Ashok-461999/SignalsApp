@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../config.dart';
+import '../models/market_session.dart';
 import '../theme/app_theme.dart';
 
 /// User-friendly error instead of raw Dio/WS stack traces.
@@ -184,12 +185,16 @@ class MarketDashboard extends StatelessWidget {
     required this.serverOk,
     required this.smartApiOk,
     required this.paperMode,
+    this.session,
+    this.brief,
     this.onRetry,
   });
 
   final bool serverOk;
   final bool smartApiOk;
   final bool paperMode;
+  final MarketSessionInfo? session;
+  final TraderBrief? brief;
   final VoidCallback? onRetry;
 
   @override
@@ -236,6 +241,71 @@ class MarketDashboard extends StatelessWidget {
               ),
             ],
           ),
+          if (session != null && session!.istTime.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.bg.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        session!.signalsActive ? Icons.schedule_rounded : Icons.nightlight_round,
+                        size: 18,
+                        color: session!.signalsActive ? AppColors.profit : AppColors.textMuted,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${session!.istTime} · ${session!.phaseLabel}',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (session!.signalsActive && session!.minutesToNextBar != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Next 5m signal scan in ${session!.minutesToNextBar} min (${session!.nextBarAt})',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                  ],
+                  if (session!.fiiDii != null && session!.fiiDii!.summary.isNotEmpty) ...[
+                    const SizedBox(height: 6),
+                    Text(session!.fiiDii!.summary, style: const TextStyle(fontSize: 11, color: AppColors.accent)),
+                  ],
+                ],
+              ),
+            ),
+          ],
+          if (brief != null && brief!.headline.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(brief!.headline, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          ],
+          if (brief != null && brief!.painPoints.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...brief!.painPoints.take(2).map(
+                  (p) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('⚠ ', style: TextStyle(fontSize: 11)),
+                        Expanded(child: Text(p, style: const TextStyle(fontSize: 11, height: 1.3))),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
         ],
       ),
     );
