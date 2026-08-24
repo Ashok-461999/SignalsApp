@@ -9,7 +9,10 @@ from sqlalchemy import select
 
 from app.backtest.options import (
     atm_strike,
-    nearest_weekly_expiry,
+    black_scholes_price,
+    days_until_expiry,
+    expiry_weekday_for,
+    nearest_expiry_min_days,
     premium_at_underlying_stop,
     strike_step,
 )
@@ -136,17 +139,37 @@ class SignalScanner:
         from app.signals.regime import Regime
 
         if regime_snap.regime == Regime.RANGING:
+            entry = float(df.iloc[-1]["close"])
+            step = strike_step(instrument)
+            strike = atm_strike(entry, step)
+            expiry = nearest_expiry_min_days(
+                min_days=settings.min_option_dte,
+                expiry_weekday=expiry_weekday_for(instrument),
+            )
             sit = {
                 "setup_name": "regime_advisory",
                 "instrument": instrument,
                 "segment": segment,
                 "direction": "neutral",
+                "underlying_entry": entry,
+                "underlying_stop_loss": 0,
+                "underlying_target": [],
+                "suggested_strike": strike,
+                "suggested_expiry": expiry.isoformat(),
+                "iv_percentile": iv_pct,
+                "risk_reward": 0,
+                "position_size": 0,
+                "premium_stop_reference": 0,
+                "entry_premium_estimate": 0,
+                "option_type": "",
+                "days_to_expiry": days_until_expiry(expiry),
+                "backtest_stats": {},
+                "tradable": False,
                 "trade_decision": "SIT_OUT",
                 "decision_reason": regime_snap.summary,
                 "regime": regime_snap.regime.value,
                 "strategy_fit": "sit out — ranges kill option buyers",
                 "adx": regime_snap.adx,
-                "iv_percentile": iv_pct,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
             evaluations.append(sit)
@@ -172,7 +195,10 @@ class SignalScanner:
             entry = result.entry or float(df.iloc[-1]["close"])
             stop = result.stop_loss or entry
             strike = atm_strike(entry, step)
-            expiry = nearest_weekly_expiry()
+            expiry = nearest_expiry_min_days(
+                min_days=settings.min_option_dte,
+                expiry_weekday=expiry_weekday_for(instrument),
+            )
             lot = LOT_SIZES.get(instrument, 25)
 
             risk = abs(entry - stop)
@@ -185,7 +211,16 @@ class SignalScanner:
             size = max(1, int((capital_risk * 100000) / (max_loss_per_lot * lot)))
             size = max(1, int(size * size_mod))
 
-            prem_stop = premium_at_underlying_stop(entry, strike, stop, 5, iv, direction)
+            days_to_exp = days_until_expiry(expiry)
+            prem_stop = premium_at_underlying_stop(entry, strike, stop, days_to_exp, iv, direction)
+            opt_type = "CE" if direction == "bullish" else "PE"
+            entry_prem = black_scholes_price(
+                entry,
+                strike,
+                float(days_to_exp),
+                iv,
+                "call" if direction == "bullish" else "put",
+            )
 
             payload = SignalPayload(
                 setup_name=setup_name,
@@ -208,6 +243,9 @@ class SignalScanner:
                 decision_reason=decision["decision_reason"],
                 regime=decision["regime"],
                 strategy_fit=decision.get("strategy_fit", ""),
+                option_type=opt_type if result.fired else "",
+                entry_premium_estimate=round(entry_prem, 2) if result.fired else 0,
+                days_to_expiry=days_to_exp,
             )
             sig = payload.to_dict()
             sig["setup_description"] = SETUP_DESCRIPTIONS.get(setup_name, "")

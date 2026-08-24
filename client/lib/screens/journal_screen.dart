@@ -5,6 +5,7 @@ import '../models/market_mode.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_providers.dart';
+import '../widgets/status_widgets.dart';
 
 enum _TradeFilter { all, open, closed, wins, losses }
 
@@ -78,7 +79,11 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('$e')),
+        error: (e, _) => AppErrorView(
+          title: 'Cannot load journal',
+          message: AppErrorView.friendlyMessage(e),
+          onRetry: () => ref.invalidate(journalProvider),
+        ),
     );
   }
 

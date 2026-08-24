@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/candle.dart';
 import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_background.dart';
 import '../widgets/candlestick_chart.dart';
+import '../widgets/status_widgets.dart';
 
 class ChartScreen extends ConsumerStatefulWidget {
   const ChartScreen({super.key, required this.instrument, this.interval = '5m'});
@@ -17,11 +21,22 @@ class ChartScreen extends ConsumerStatefulWidget {
 
 class _ChartScreenState extends ConsumerState<ChartScreen> {
   late String _interval;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _interval = widget.interval;
+    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      if (!mounted) return;
+      ref.invalidate(candlesProvider((widget.instrument, _interval)));
+    });
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
   }
 
   @override
@@ -29,9 +44,13 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
     final candles = ref.watch(candlesProvider((widget.instrument, _interval)));
     final prices = ref.watch(livePricesProvider);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: Column(
+    return AppBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: AppColors.bg.withValues(alpha: 0.35),
+          elevation: 0,
+          title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.instrument),
@@ -39,8 +58,12 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               data: (p) {
                 final live = p[widget.instrument];
                 return Text(
-                  live != null ? live.toStringAsFixed(2) : 'Live —',
-                  style: const TextStyle(fontSize: 13, color: AppColors.accent),
+                  live != null ? '₹${live.toStringAsFixed(2)} LIVE' : 'Live —',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: live != null ? AppColors.profit : AppColors.textMuted,
+                    fontWeight: FontWeight.w700,
+                  ),
                 );
               },
               loading: () => const SizedBox.shrink(),
@@ -54,8 +77,8 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
             onPressed: () => ref.invalidate(candlesProvider((widget.instrument, _interval))),
           ),
         ],
-      ),
-      body: candles.when(
+        ),
+        body: candles.when(
         data: (data) {
           final list = data.candles;
           final last = list.isNotEmpty ? list.last : null;
@@ -66,6 +89,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
           final up = change >= 0;
 
           return ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
               Row(
@@ -112,7 +136,7 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
               const SizedBox(height: 8),
               Text(
                 'O ${last?.open.toStringAsFixed(1) ?? '—'}  H ${last?.high.toStringAsFixed(1) ?? '—'}  '
-                'L ${last?.low.toStringAsFixed(1) ?? '—'}  V ${last != null ? (last.volume / 1000).toStringAsFixed(1) + 'k' : '—'}',
+                'L ${last?.low.toStringAsFixed(1) ?? '—'}  V ${last != null ? '${(last.volume / 1000).toStringAsFixed(1)}k' : '—'}',
                 style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
               const SizedBox(height: 16),
@@ -123,7 +147,12 @@ class _ChartScreenState extends ConsumerState<ChartScreen> {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator(color: AppColors.accent)),
-        error: (e, _) => Center(child: Text('$e', style: const TextStyle(color: AppColors.loss))),
+        error: (e, _) => AppErrorView(
+          title: 'Chart unavailable',
+          message: AppErrorView.friendlyMessage(e),
+          onRetry: () => ref.invalidate(candlesProvider((widget.instrument, _interval))),
+        ),
+      ),
       ),
     );
   }
@@ -163,7 +192,7 @@ class _OhlcGrid extends StatelessWidget {
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                       ),
                     ),
-                    Text('${c.close.toStringAsFixed(1)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    Text(c.close.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.w600)),
                   ],
                 ),
               );

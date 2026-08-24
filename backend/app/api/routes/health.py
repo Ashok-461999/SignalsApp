@@ -27,7 +27,10 @@ from app.services.trading_settings import load_trading_settings, trading_setting
 router = APIRouter(tags=["health"])
 
 
-
+@router.get("/health/live")
+async def health_live() -> dict:
+    """Fast liveness probe — never calls SmartAPI (used by Docker healthcheck)."""
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 @router.get("/health")

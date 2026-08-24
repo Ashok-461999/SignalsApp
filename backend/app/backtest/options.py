@@ -47,16 +47,34 @@ def strike_step(instrument: str) -> int:
     return 100 if instrument.upper() == "BANKNIFTY" else 50
 
 
-def nearest_weekly_expiry(from_date: date | None = None, holding_days: int = 5) -> date:
-    """Approximate nearest weekly expiry (Thursday for NSE indices)."""
+def expiry_weekday_for(instrument: str) -> int:
+    """NSE index weeklies/monthlies: Tuesday. BSE SENSEX: Thursday."""
+    return 3 if instrument.upper() == "SENSEX" else 1  # Mon=0 … Thu=3, Tue=1
+
+
+def nearest_expiry_min_days(
+    from_date: date | None = None,
+    min_days: int = 20,
+    expiry_weekday: int = 1,
+) -> date:
+    """Nearest listed expiry with at least min_days remaining (20+ DTE style)."""
     d = from_date or date.today()
-    # Next Thursday at least holding_days out
-    for offset in range(holding_days, holding_days + 14):
-        candidate = d.toordinal() + offset
-        dt = date.fromordinal(candidate)
-        if dt.weekday() == 3:  # Thursday
+    start_ordinal = d.toordinal() + min_days
+    for ordinal in range(start_ordinal, start_ordinal + 90):
+        dt = date.fromordinal(ordinal)
+        if dt.weekday() == expiry_weekday:
             return dt
-    return d
+    return date.fromordinal(start_ordinal)
+
+
+def days_until_expiry(expiry: date, from_date: date | None = None) -> int:
+    d = from_date or date.today()
+    return max((expiry - d).days, 1)
+
+
+def nearest_weekly_expiry(from_date: date | None = None, holding_days: int = 5) -> date:
+    """Legacy helper — prefer nearest_expiry_min_days for live signals."""
+    return nearest_expiry_min_days(from_date=from_date, min_days=holding_days, expiry_weekday=3)
 
 
 def premium_at_underlying_stop(

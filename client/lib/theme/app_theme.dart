@@ -42,6 +42,12 @@ ThemeData buildAppTheme() {
   );
 
   return base.copyWith(
+    splashFactory: InkRipple.splashFactory,
+    pageTransitionsTheme: const PageTransitionsTheme(
+      builders: {
+        TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+      },
+    ),
     textTheme: textTheme,
     appBarTheme: AppBarTheme(
       backgroundColor: AppColors.bg,
@@ -55,7 +61,7 @@ ThemeData buildAppTheme() {
       ),
     ),
     cardTheme: CardThemeData(
-      color: AppColors.surface,
+      color: AppColors.surface.withValues(alpha: 0.82),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),

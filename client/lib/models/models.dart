@@ -12,6 +12,9 @@ class SignalModel {
   final double riskReward;
   final int positionSize;
   final double premiumStopReference;
+  final double entryPremiumEstimate;
+  final String optionType;
+  final int daysToExpiry;
   final Map<String, dynamic> backtestStats;
   final String timestamp;
   final bool tradable;
@@ -34,6 +37,9 @@ class SignalModel {
     required this.riskReward,
     required this.positionSize,
     required this.premiumStopReference,
+    this.entryPremiumEstimate = 0,
+    this.optionType = '',
+    this.daysToExpiry = 0,
     required this.backtestStats,
     required this.timestamp,
     required this.tradable,
@@ -43,25 +49,72 @@ class SignalModel {
     this.strategyFit = '',
   });
 
+  String get optionLabel {
+    if (optionType.isNotEmpty && suggestedStrike > 0) {
+      return '${suggestedStrike.toStringAsFixed(0)} $optionType';
+    }
+    if (suggestedStrike > 0 && direction != 'neutral') {
+      return '${suggestedStrike.toStringAsFixed(0)} ${direction == 'bullish' ? 'CE' : 'PE'}';
+    }
+    return '';
+  }
+
+  String get brokerOrderHint {
+    if (tradeDecision != 'TAKE' || optionLabel.isEmpty) return '';
+    return 'BUY $instrument $optionLabel × $positionSize lots';
+  }
+
+  String get expiryLabel {
+    if (suggestedExpiry.isEmpty) return '';
+    if (daysToExpiry > 0) return '$suggestedExpiry ($daysToExpiry DTE)';
+    return suggestedExpiry;
+  }
+
+  static int _daysFromExpiryString(String expiry) {
+    if (expiry.isEmpty) return 0;
+    try {
+      final d = DateTime.parse(expiry);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final exp = DateTime(d.year, d.month, d.day);
+      return exp.difference(today).inDays;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  static double _dbl(dynamic v, [double fallback = 0]) =>
+      v is num ? v.toDouble() : fallback;
+
+  static int _int(dynamic v, [int fallback = 0]) =>
+      v is num ? v.toInt() : fallback;
+
   factory SignalModel.fromJson(Map<String, dynamic> json) => SignalModel(
-        setupName: json['setup_name'] as String,
-        instrument: json['instrument'] as String,
+        setupName: json['setup_name'] as String? ?? 'unknown',
+        instrument: json['instrument'] as String? ?? '',
         segment: json['segment'] as String? ?? 'spot',
-        direction: json['direction'] as String,
-        underlyingEntry: (json['underlying_entry'] as num).toDouble(),
-        underlyingStopLoss: (json['underlying_stop_loss'] as num).toDouble(),
-        underlyingTarget: (json['underlying_target'] as List<dynamic>)
+        direction: json['direction'] as String? ?? 'neutral',
+        underlyingEntry: _dbl(json['underlying_entry']),
+        underlyingStopLoss: _dbl(json['underlying_stop_loss']),
+        underlyingTarget: (json['underlying_target'] as List<dynamic>? ?? [])
             .map((e) => (e as num).toDouble())
             .toList(),
-        suggestedStrike: (json['suggested_strike'] as num).toDouble(),
-        suggestedExpiry: json['suggested_expiry'] as String,
-        ivPercentile: (json['iv_percentile'] as num).toDouble(),
-        riskReward: (json['risk_reward'] as num).toDouble(),
-        positionSize: json['position_size'] as int,
-        premiumStopReference: (json['premium_stop_reference'] as num).toDouble(),
-        backtestStats: Map<String, dynamic>.from(json['backtest_stats'] as Map),
-        timestamp: json['timestamp'] as String,
-        tradable: json['tradable'] as bool? ?? true,
+        suggestedStrike: _dbl(json['suggested_strike']),
+        suggestedExpiry: json['suggested_expiry'] as String? ?? '',
+        ivPercentile: _dbl(json['iv_percentile']),
+        riskReward: _dbl(json['risk_reward']),
+        positionSize: _int(json['position_size']),
+        premiumStopReference: _dbl(json['premium_stop_reference']),
+        entryPremiumEstimate: _dbl(json['entry_premium_estimate']),
+        optionType: json['option_type'] as String? ?? '',
+        daysToExpiry: _int(json['days_to_expiry']) > 0
+            ? _int(json['days_to_expiry'])
+            : _daysFromExpiryString(json['suggested_expiry'] as String? ?? ''),
+        backtestStats: json['backtest_stats'] is Map
+            ? Map<String, dynamic>.from(json['backtest_stats'] as Map)
+            : {},
+        timestamp: json['timestamp'] as String? ?? '',
+        tradable: json['tradable'] as bool? ?? false,
         tradeDecision: json['trade_decision'] as String? ?? 'NO_TRADE',
         decisionReason: json['decision_reason'] as String? ?? '',
         regime: json['regime'] as String? ?? '',

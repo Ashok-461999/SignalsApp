@@ -7,6 +7,7 @@ import '../screens/chart_screen.dart';
 import '../theme/app_theme.dart';
 import '../widgets/ai_insight_card.dart';
 import '../widgets/candlestick_chart.dart';
+import '../widgets/status_widgets.dart';
 
 class SetupDetailScreen extends ConsumerStatefulWidget {
   const SetupDetailScreen({super.key, required this.signal});
@@ -38,9 +39,34 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
         ],
       ),
       body: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
           _DecisionHero(signal: s),
+          if (s.brokerOrderHint.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.take,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.takeBorder),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Place in broker', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                  Text(s.brokerOrderHint, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.profit)),
+                  if (s.entryPremiumEstimate > 0)
+                    Text(
+                      'Est. premium ~₹${s.entryPremiumEstimate.toStringAsFixed(0)} per unit · IV ${s.ivPercentile.toStringAsFixed(0)}%',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           AiInsightCard(signal: s),
           const SizedBox(height: 16),
@@ -66,10 +92,25 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
               target: s.underlyingTarget.isNotEmpty ? s.underlyingTarget.first : null,
             ),
             loading: () => const SizedBox(height: 260, child: Center(child: CircularProgressIndicator(color: AppColors.accent))),
-            error: (e, _) => Text('$e'),
+            error: (e, _) => AppErrorView(
+              title: 'Chart unavailable',
+              message: AppErrorView.friendlyMessage(e),
+              compact: true,
+              onRetry: () => ref.invalidate(candlesProvider((s.instrument, _interval))),
+            ),
           ),
           const SizedBox(height: 16),
-          _SectionTitle('Trade plan', icon: Icons.route_rounded),
+          _SectionTitle('Options trade', icon: Icons.receipt_long_rounded),
+          _MetricGrid(children: [
+            _MetricTile(label: 'Strike', value: s.optionLabel.isNotEmpty ? s.optionLabel : s.suggestedStrike.toStringAsFixed(0), icon: Icons.tag_rounded),
+            _MetricTile(label: 'Expiry', value: s.expiryLabel.isNotEmpty ? s.expiryLabel : s.suggestedExpiry, icon: Icons.event_rounded),
+            _MetricTile(label: 'Est. premium', value: s.entryPremiumEstimate > 0 ? '₹${s.entryPremiumEstimate.toStringAsFixed(0)}' : '—', icon: Icons.payments_rounded),
+            _MetricTile(label: 'Lots', value: '${s.positionSize}', icon: Icons.pie_chart_rounded),
+            _MetricTile(label: 'IV %ile', value: '${s.ivPercentile.toStringAsFixed(0)}%', icon: Icons.waves_rounded),
+            _MetricTile(label: 'Prem @ SL', value: s.premiumStopReference.toStringAsFixed(1), icon: Icons.warning_amber_rounded),
+          ]),
+          const SizedBox(height: 16),
+          _SectionTitle('Underlying plan', icon: Icons.route_rounded),
           _MetricGrid(children: [
             _MetricTile(label: 'Instrument', value: s.instrument, icon: Icons.layers_rounded),
             _MetricTile(label: 'Direction', value: s.direction.toUpperCase(), icon: Icons.swap_vert_rounded),
@@ -82,15 +123,6 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
               valueColor: AppColors.profit,
             ),
             _MetricTile(label: 'R:R', value: s.riskReward.toStringAsFixed(2), icon: Icons.balance_rounded),
-            _MetricTile(label: 'Strike', value: s.suggestedStrike.toStringAsFixed(0), icon: Icons.tag_rounded),
-            _MetricTile(label: 'Size', value: '${s.positionSize} lots', icon: Icons.pie_chart_rounded),
-          ]),
-          const SizedBox(height: 16),
-          _SectionTitle('Options context', icon: Icons.insights_rounded),
-          _MetricGrid(children: [
-            _MetricTile(label: 'Expiry', value: s.suggestedExpiry, icon: Icons.event_rounded),
-            _MetricTile(label: 'IV %ile', value: '${s.ivPercentile.toStringAsFixed(0)}%', icon: Icons.waves_rounded),
-            _MetricTile(label: 'Prem @ SL', value: s.premiumStopReference.toStringAsFixed(1), icon: Icons.warning_amber_rounded),
           ]),
           const SizedBox(height: 16),
           _SectionTitle('Backtest', icon: Icons.history_rounded),

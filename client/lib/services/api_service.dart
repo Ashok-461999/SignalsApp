@@ -7,15 +7,37 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../config.dart';
 import '../models/candle.dart';
 import '../models/models.dart';
+import '../models/news_intel.dart';
 
 class ApiService {
-  ApiService({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
-              baseUrl: AppConfig.apiBaseUrl,
-              connectTimeout: const Duration(seconds: 10),
-              receiveTimeout: const Duration(seconds: 30),
-            ));
+  ApiService({Dio? dio}) : _dio = dio ?? _createDio();
+
+  static Dio _createDio() {
+    final dio = Dio(BaseOptions(
+      baseUrl: AppConfig.apiBaseUrl,
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+    ));
+    dio.interceptors.add(InterceptorsWrapper(
+      onError: (error, handler) async {
+        final opts = error.requestOptions;
+        final retryCount = (opts.extra['retryCount'] as int?) ?? 0;
+        final retriable = error.type == DioExceptionType.connectionTimeout ||
+            error.type == DioExceptionType.receiveTimeout ||
+            error.type == DioExceptionType.connectionError;
+        if (retryCount < 2 && retriable) {
+          opts.extra['retryCount'] = retryCount + 1;
+          await Future<void>.delayed(Duration(milliseconds: 350 * (retryCount + 1)));
+          try {
+            handler.resolve(await dio.fetch(opts));
+            return;
+          } catch (_) {}
+        }
+        handler.next(error);
+      },
+    ));
+    return dio;
+  }
 
   final Dio _dio;
 
@@ -207,6 +229,31 @@ class ApiService {
     return r.data!;
   }
 
+  Future<List<SignalModel>> getSignalEvaluations() async {
+    final r = await _dio.get<Map<String, dynamic>>('/signals/evaluations');
+    final evals = r.data?['evaluations'] as List<dynamic>? ?? [];
+    final out = <SignalModel>[];
+    for (final raw in evals) {
+      if (raw is! Map) continue;
+      try {
+        out.add(SignalModel.fromJson(Map<String, dynamic>.from(raw)));
+      } catch (_) {
+        // Skip malformed rows instead of failing the whole feed.
+      }
+    }
+    return out;
+  }
+
+  Future<MarketIntelResponse> getMarketPredictions({int limit = 15}) async {
+    final r = await _dio.get<Map<String, dynamic>>('/market/predictions', queryParameters: {'limit': limit});
+    return MarketIntelResponse.fromJson(r.data ?? {});
+  }
+
+  Future<Map<String, dynamic>> getRegimes() async {
+    final r = await _dio.get<Map<String, dynamic>>('/signals/regime');
+    return r.data ?? {};
+  }
+
   Future<Map<String, dynamic>> getTradingSettings() async {
     final r = await _dio.get<Map<String, dynamic>>('/settings/trading');
     return r.data!;
@@ -220,64 +267,162 @@ class ApiService {
 
 class SignalWebSocket {
   WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _subscription;
   final _controller = StreamController<SignalModel>.broadcast();
+  final _snapshotReady = StreamController<void>.broadcast();
+  bool _disposed = false;
 
   Stream<SignalModel> get stream => _controller.stream;
+  Stream<void> get snapshotReady => _snapshotReady.stream;
 
   void connect() {
+    _connect();
+  }
+
+  void _connect() {
+    if (_disposed) return;
+    _subscription?.cancel();
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+
     final uri = Uri.parse('${AppConfig.wsBaseUrl}/signals');
-    _channel = WebSocketChannel.connect(uri);
-    _channel!.stream.listen((event) {
-      final msg = jsonDecode(event as String) as Map<String, dynamic>;
-      if (msg['type'] == 'signal' && msg['data'] != null) {
-        _controller.add(SignalModel.fromJson(msg['data'] as Map<String, dynamic>));
-      } else if (msg['type'] == 'snapshot' && msg['signals'] != null) {
-        for (final s in msg['signals'] as List<dynamic>) {
-          _controller.add(SignalModel.fromJson(s as Map<String, dynamic>));
-        }
-      }
+    try {
+      _channel = WebSocketChannel.connect(uri);
+      _subscription = _channel!.stream.listen(
+        (event) {
+          if (_disposed || _controller.isClosed) return;
+          try {
+            final msg = jsonDecode(event as String) as Map<String, dynamic>;
+            if (msg['type'] == 'signal' && msg['data'] != null) {
+              _controller.add(SignalModel.fromJson(Map<String, dynamic>.from(msg['data'] as Map)));
+            } else if (msg['type'] == 'snapshot') {
+              final signals = msg['signals'] as List<dynamic>? ?? [];
+              for (final s in signals) {
+                if (s is! Map) continue;
+                try {
+                  _controller.add(SignalModel.fromJson(Map<String, dynamic>.from(s)));
+                } catch (_) {}
+              }
+              if (!_snapshotReady.isClosed) {
+                _snapshotReady.add(null);
+              }
+            }
+          } catch (_) {}
+        },
+        onError: (_) => _scheduleReconnect(),
+        onDone: () => _scheduleReconnect(),
+        cancelOnError: false,
+      );
+    } catch (_) {
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    if (_disposed) return;
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!_disposed) _connect();
     });
   }
 
   void dispose() {
-    _channel?.sink.close();
-    _controller.close();
+    _disposed = true;
+    _subscription?.cancel();
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
+    if (!_snapshotReady.isClosed) {
+      _snapshotReady.close();
+    }
+    if (!_controller.isClosed) {
+      _controller.close();
+    }
   }
 }
 
 class LivePriceWebSocket {
   WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _subscription;
   final _prices = <String, double>{};
   final _controller = StreamController<Map<String, double>>.broadcast();
+  bool _disposed = false;
 
   Stream<Map<String, double>> get stream => _controller.stream;
   Map<String, double> get prices => Map.unmodifiable(_prices);
 
   void connect() {
+    _connect();
+  }
+
+  void _connect() {
+    if (_disposed) return;
+    _subscription?.cancel();
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
+    _channel = null;
+
     final uri = Uri.parse('${AppConfig.wsBaseUrl}/live-candles');
-    _channel = WebSocketChannel.connect(uri);
-    _channel!.stream.listen((event) {
-      final msg = jsonDecode(event as String) as Map<String, dynamic>;
-      if (msg['type'] == 'candle' && msg['data'] != null) {
-        final d = msg['data'] as Map<String, dynamic>;
-        if (d['forming'] == true && d['interval'] == '5m') {
-          _prices[d['instrument'] as String] = (d['close'] as num).toDouble();
-          _controller.add(Map.from(_prices));
-        }
-      } else if (msg['type'] == 'snapshot' && msg['candles'] != null) {
-        for (final c in msg['candles'] as List<dynamic>) {
-          final d = c as Map<String, dynamic>;
-          if (d['interval'] == '5m' && d['forming'] == true) {
-            _prices[d['instrument'] as String] = (d['close'] as num).toDouble();
-          }
-        }
-        _controller.add(Map.from(_prices));
-      }
+    try {
+      _channel = WebSocketChannel.connect(uri);
+      _subscription = _channel!.stream.listen(
+        (event) {
+          if (_disposed || _controller.isClosed) return;
+          try {
+            final msg = jsonDecode(event as String) as Map<String, dynamic>;
+            if (msg['type'] == 'candle' && msg['data'] != null) {
+              final d = msg['data'] as Map<String, dynamic>;
+              if (d['forming'] == true && d['interval'] == '5m') {
+                final instrument = d['instrument'] as String?;
+                final close = d['close'];
+                if (instrument != null && close is num) {
+                  _prices[instrument] = close.toDouble();
+                  _controller.add(Map.from(_prices));
+                }
+              }
+            } else if (msg['type'] == 'snapshot') {
+              final candles = msg['candles'] as List<dynamic>? ?? [];
+              for (final c in candles) {
+                if (c is! Map) continue;
+                final d = Map<String, dynamic>.from(c);
+                if (d['interval'] == '5m' && d['forming'] == true) {
+                  final instrument = d['instrument'] as String?;
+                  final close = d['close'];
+                  if (instrument != null && close is num) {
+                    _prices[instrument] = close.toDouble();
+                  }
+                }
+              }
+              _controller.add(Map.from(_prices));
+            }
+          } catch (_) {}
+        },
+        onError: (_) => _scheduleReconnect(),
+        onDone: () => _scheduleReconnect(),
+        cancelOnError: false,
+      );
+    } catch (_) {
+      _scheduleReconnect();
+    }
+  }
+
+  void _scheduleReconnect() {
+    if (_disposed) return;
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!_disposed) _connect();
     });
   }
 
   void dispose() {
-    _channel?.sink.close();
-    _controller.close();
+    _disposed = true;
+    _subscription?.cancel();
+    try {
+      _channel?.sink.close();
+    } catch (_) {}
+    if (!_controller.isClosed) {
+      _controller.close();
+    }
   }
 }

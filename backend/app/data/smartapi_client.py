@@ -131,13 +131,25 @@ class SmartAPIClient:
         if not self._settings.smartapi_configured:
             return {"configured": False, "connected": False, "message": "Credentials not set"}
         try:
-            self._ensure_session()
-            expiry = self._session_expiry.isoformat() if self._session_expiry else None
+            from app.core.timeouts import run_with_timeout
+
+            def _check() -> dict[str, Any]:
+                self._ensure_session()
+                expiry = self._session_expiry.isoformat() if self._session_expiry else None
+                return {
+                    "configured": True,
+                    "connected": True,
+                    "message": "Session active",
+                    "session_expires_at": expiry,
+                }
+
+            result = run_with_timeout(_check, timeout_seconds=5, label="SmartAPI health")
+            if result is not None:
+                return result
             return {
                 "configured": True,
-                "connected": True,
-                "message": "Session active",
-                "session_expires_at": expiry,
+                "connected": False,
+                "message": "SmartAPI health check timed out",
             }
         except Exception as exc:
             logger.exception("SmartAPI health check failed")

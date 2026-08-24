@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Signals — set false to fire on setup detection without backtest validation
     require_backtest_for_signals: bool = False
 
+    # Options — minimum days to expiry for suggested contracts (user preference: 20+ DTE)
+    min_option_dte: int = 20
+
     @property
     def database_url(self) -> str:
         path = Path(self.sqlite_path).as_posix()

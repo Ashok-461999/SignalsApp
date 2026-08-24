@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/candle.dart';
 import '../theme/app_theme.dart';
 
-class CandlestickChart extends StatelessWidget {
+class CandlestickChart extends StatefulWidget {
   const CandlestickChart({
     super.key,
     required this.candles,
@@ -22,19 +22,61 @@ class CandlestickChart extends StatelessWidget {
   final double? target;
 
   @override
+  State<CandlestickChart> createState() => _CandlestickChartState();
+}
+
+class _CandlestickChartState extends State<CandlestickChart> {
+  final _transform = TransformationController();
+  double _scale = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _transform.addListener(_onTransform);
+  }
+
+  void _onTransform() {
+    final next = _transform.value.getMaxScaleOnAxis();
+    if ((next - _scale).abs() > 0.02 && mounted) {
+      setState(() => _scale = next);
+    }
+  }
+
+  @override
+  void dispose() {
+    _transform.removeListener(_onTransform);
+    _transform.dispose();
+    super.dispose();
+  }
+
+  void _resetZoom() {
+    _transform.value = Matrix4.identity();
+    setState(() => _scale = 1);
+  }
+
+  double _chartWidth(BoxConstraints constraints, int candleCount) {
+    final ideal = candleCount * 11.0;
+    final viewport = constraints.maxWidth.isFinite && constraints.maxWidth > 0
+        ? constraints.maxWidth
+        : ideal;
+    return ideal > viewport ? ideal : viewport;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (candles.isEmpty) {
+    if (widget.candles.isEmpty) {
       return SizedBox(
-        height: height,
+        height: widget.height,
         child: const Center(child: Text('No candle data', style: TextStyle(color: AppColors.textMuted))),
       );
     }
 
-    final display = candles.length > 80 ? candles.sublist(candles.length - 80) : candles;
-    final chartH = showVolume ? height * 0.72 : height;
+    final display = widget.candles.length > 120
+        ? widget.candles.sublist(widget.candles.length - 120)
+        : widget.candles;
 
     return Container(
-      height: height,
+      height: widget.height,
       decoration: BoxDecoration(
         color: AppColors.surfaceHigh,
         borderRadius: BorderRadius.circular(16),
@@ -43,26 +85,81 @@ class CandlestickChart extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
-          SizedBox(
-            height: chartH,
-            width: double.infinity,
-            child: CustomPaint(
-              painter: _CandlePainter(
-                candles: display,
-                entry: entry,
-                stop: stop,
-                target: target,
-              ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+            child: Row(
+              children: [
+                Text(
+                  _scale > 1.05 ? 'Drag to pan · tap reset' : 'Pinch to zoom · scroll page to move',
+                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                ),
+                const Spacer(),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 18,
+                  tooltip: 'Reset zoom',
+                  onPressed: _resetZoom,
+                  icon: const Icon(Icons.fit_screen_rounded, color: AppColors.textMuted),
+                ),
+              ],
             ),
           ),
-          if (showVolume)
-            SizedBox(
-              height: height - chartH,
-              width: double.infinity,
-              child: CustomPaint(
-                painter: _VolumePainter(candles: display),
-              ),
+          Expanded(
+            child: Column(
+              children: [
+                Expanded(
+                  flex: widget.showVolume ? 72 : 100,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final chartWidth = _chartWidth(constraints, display.length);
+                      return InteractiveViewer(
+                        transformationController: _transform,
+                        minScale: 0.8,
+                        maxScale: 5,
+                        panEnabled: _scale > 1.05,
+                        boundaryMargin: const EdgeInsets.all(24),
+                        clipBehavior: Clip.hardEdge,
+                        child: SizedBox(
+                          width: chartWidth,
+                          height: constraints.maxHeight,
+                          child: CustomPaint(
+                            size: Size(chartWidth, constraints.maxHeight),
+                            painter: _CandlePainter(
+                              candles: display,
+                              entry: widget.entry,
+                              stop: widget.stop,
+                              target: widget.target,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                if (widget.showVolume)
+                  Expanded(
+                    flex: 28,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final chartWidth = _chartWidth(constraints, display.length);
+                        return SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: SizedBox(
+                            width: chartWidth,
+                            height: constraints.maxHeight,
+                            child: CustomPaint(
+                              size: Size(chartWidth, constraints.maxHeight),
+                              painter: _VolumePainter(candles: display),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -84,11 +181,12 @@ class _CandlePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (candles.isEmpty) return;
+    if (candles.isEmpty || size.width <= 0 || size.height <= 0) return;
 
     final pad = 8.0;
     final w = size.width - pad * 2;
     final h = size.height - pad * 2;
+    if (w <= 0 || h <= 0) return;
 
     double minY = candles.first.low;
     double maxY = candles.first.high;
@@ -141,7 +239,7 @@ class _CandlePainter extends CustomPainter {
     }
 
     void drawLevel(double? price, Color color, String label) {
-      if (price == null) return;
+      if (price == null || price <= 0) return;
       final y = yOf(price);
       final p = Paint()
         ..color = color
@@ -174,13 +272,14 @@ class _VolumePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (candles.isEmpty) return;
-    final maxVol = candles.map((c) => c.volume).reduce((a, b) => a > b ? a : b);
+    if (candles.isEmpty || size.width <= 0 || size.height <= 0) return;
+    final maxVol = candles.map((c) => c.volume).fold<double>(0, (a, b) => a > b ? a : b);
     if (maxVol <= 0) return;
 
     final pad = 8.0;
     final w = size.width - pad * 2;
     final h = size.height - 4;
+    if (w <= 0 || h <= 0) return;
     final slot = w / candles.length;
     final barW = (slot * 0.5).clamp(1.5, 8.0);
 
@@ -234,9 +333,9 @@ class _SparkPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (closes.length < 2) return;
-    final min = closes.reduce((a, b) => a < b ? a : b);
-    final max = closes.reduce((a, b) => a > b ? a : b);
+    if (closes.length < 2 || size.width <= 0 || size.height <= 0) return;
+    final min = closes.fold<double>(closes.first, (a, b) => a < b ? a : b);
+    final max = closes.fold<double>(closes.first, (a, b) => a > b ? a : b);
     final range = (max - min).abs() < 0.01 ? 1.0 : max - min;
 
     final path = Path();

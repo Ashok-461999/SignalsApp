@@ -53,12 +53,14 @@ class HealthResponse {
   final Map<String, dynamic> database;
   final Map<String, dynamic>? trading;
   final Map<String, dynamic>? crypto;
+  final Map<String, dynamic>? smartapi;
 
   const HealthResponse({
     required this.status,
     required this.database,
     this.trading,
     this.crypto,
+    this.smartapi,
   });
 
   factory HealthResponse.fromJson(Map<String, dynamic> json) => HealthResponse(
@@ -66,5 +68,6 @@ class HealthResponse {
         database: Map<String, dynamic>.from(json['database'] as Map),
         trading: json['trading'] != null ? Map<String, dynamic>.from(json['trading'] as Map) : null,
         crypto: json['crypto'] != null ? Map<String, dynamic>.from(json['crypto'] as Map) : null,
+        smartapi: json['smartapi'] != null ? Map<String, dynamic>.from(json['smartapi'] as Map) : null,
       );
 }

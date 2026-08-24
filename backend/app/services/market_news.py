@@ -39,6 +39,13 @@ def _parse_rss(xml_text: str, source: str, limit: int = 5) -> list[dict]:
     return headlines
 
 
+def get_enriched_headlines(max_items: int = 15) -> list[dict]:
+    from app.services.market_predictions import enrich_headlines
+
+    raw = get_market_headlines(max_items=max_items)
+    return enrich_headlines(raw)
+
+
 def get_market_headlines(max_items: int = 12) -> list[dict]:
     now = datetime.now(timezone.utc)
     cached_at = _CACHE.get("at")

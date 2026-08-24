@@ -1,5 +1,5 @@
 name: signalapp_client
-description: SignalApp — options signal & backtest client
+description: AlphaPulse AI — professional trading signals with AI analysis
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -23,6 +23,17 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/app_icon.png
+  adaptive_icon_background: "#0A0D12"
+  adaptive_icon_foreground: assets/app_icon.png
+  remove_alpha_ios: true
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/bg_trading_ai.png

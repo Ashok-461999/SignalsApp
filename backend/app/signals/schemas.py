@@ -50,6 +50,9 @@ class SignalPayload:
     decision_reason: str = ""
     regime: str = ""
     strategy_fit: str = ""
+    option_type: str = ""  # CE | PE
+    entry_premium_estimate: float = 0.0
+    days_to_expiry: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,4 +76,7 @@ class SignalPayload:
             "decision_reason": self.decision_reason,
             "regime": self.regime,
             "strategy_fit": self.strategy_fit,
+            "option_type": self.option_type,
+            "entry_premium_estimate": self.entry_premium_estimate,
+            "days_to_expiry": self.days_to_expiry,
         }

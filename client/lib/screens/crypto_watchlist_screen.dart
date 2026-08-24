@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/app_providers.dart';
 import '../screens/chart_screen.dart';
 import '../theme/app_theme.dart';
+import '../widgets/status_widgets.dart';
 
 class CryptoWatchlistScreen extends ConsumerWidget {
   const CryptoWatchlistScreen({super.key});
@@ -61,9 +62,11 @@ class CryptoWatchlistScreen extends ConsumerWidget {
               padding: EdgeInsets.all(32),
               child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
             ),
-            error: (e, _) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: Text('Prices unavailable: $e', style: const TextStyle(color: AppColors.loss)),
+            error: (e, _) => AppErrorView(
+              title: 'Crypto prices unavailable',
+              message: AppErrorView.friendlyMessage(e),
+              compact: true,
+              onRetry: () => ref.invalidate(cryptoPricesProvider),
             ),
           ),
         ],
@@ -223,7 +226,7 @@ class _BalancesCard extends StatelessWidget {
                 children: [
                   Text(b['asset'] as String? ?? ''),
                   Text(
-                    '${((b['free'] as num?)?.toDouble() ?? 0).toStringAsFixed(4)}',
+                    ((b['free'] as num?)?.toDouble() ?? 0).toStringAsFixed(4),
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ],
