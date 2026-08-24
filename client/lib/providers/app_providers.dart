@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-import '../models/market_mode.dart';
 import '../models/models.dart';
 import '../models/news_intel.dart';
 import '../services/api_service.dart';
@@ -15,36 +14,10 @@ const _storage = FlutterSecureStorage();
 const _notifKey = 'notifications_enabled';
 const _claudeKeyKey = 'claude_api_key';
 const _aiEnabledKey = 'ai_analysis_enabled';
-const _marketModeKey = 'market_mode';
 
 final apiServiceProvider = Provider<ApiService>((ref) => ApiService());
 
 final claudeServiceProvider = Provider<ClaudeService>((ref) => ClaudeService());
-
-final cryptoCredentialsProvider = FutureProvider<CryptoCredentialsStatus>((ref) async {
-  final data = await ref.watch(apiServiceProvider).getCryptoCredentialsStatus();
-  return CryptoCredentialsStatus.fromJson(data);
-});
-
-final marketModeProvider = StateNotifierProvider<MarketModeNotifier, MarketMode>((ref) {
-  return MarketModeNotifier();
-});
-
-class MarketModeNotifier extends StateNotifier<MarketMode> {
-  MarketModeNotifier() : super(MarketMode.indian) {
-    _load();
-  }
-
-  Future<void> _load() async {
-    final v = await _storage.read(key: _marketModeKey);
-    state = MarketMode.fromString(v);
-  }
-
-  Future<void> setMode(MarketMode mode) async {
-    state = mode;
-    await _storage.write(key: _marketModeKey, value: mode.storageValue);
-  }
-}
 
 final aiAnalysisEnabledProvider =
     StateNotifierProvider<AiAnalysisEnabledNotifier, bool>((ref) {
@@ -121,8 +94,6 @@ const defaultTradingSettings = <String, dynamic>{
   'kill_switch': false,
   'paper_trading': true,
   'live_execution_enabled': false,
-  'crypto_paper_trading': true,
-  'crypto_live_enabled': false,
 };
 
 final healthProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getHealth());
@@ -284,32 +255,12 @@ Stream<T> _throttleLatest<T>(Stream<T> input, Duration interval) {
 
 final candlesProvider = FutureProvider.family((ref, (String, String) args) {
   final (instrument, interval) = args;
-  final mode = ref.watch(marketModeProvider);
-  if (mode == MarketMode.crypto) {
-    return ref.watch(apiServiceProvider).getCryptoCandles(symbol: instrument, interval: interval);
-  }
   return ref.watch(apiServiceProvider).getCandles(instrument: instrument, interval: interval);
-});
-
-final cryptoPricesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  return ref.watch(apiServiceProvider).getCryptoPrices();
-});
-
-final cryptoBalancesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  return ref.watch(apiServiceProvider).getCryptoBalances();
-});
-
-final cryptoTradesProvider = FutureProvider.family<List<Map<String, dynamic>>, String>((ref, symbol) async {
-  return ref.watch(apiServiceProvider).getCryptoTrades(symbol: symbol);
 });
 
 /// Listens to WS and fires phone notifications on TAKE signals.
 final tradeAlertListenerProvider = Provider<void>((ref) {
-    // Indian market only — crypto TAKE alerts when crypto signals ship.
-    final mode = ref.watch(marketModeProvider);
-    if (mode != MarketMode.indian) return;
-
-    final enabled = ref.watch(notificationsEnabledProvider);
+  final enabled = ref.watch(notificationsEnabledProvider);
   final notifications = ref.watch(notificationServiceProvider);
   final ws = ref.watch(signalWsProvider);
 

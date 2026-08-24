@@ -43,9 +43,6 @@ List<Override> testShellOverrides({MarketIntelResponse? intel}) => [
       setupsProvider.overrideWith((ref) async => {'setups': <dynamic>[]}),
       tradingSettingsProvider.overrideWith((ref) async => Map<String, dynamic>.from(defaultTradingSettings)),
       regimesProvider.overrideWith((ref) async => {}),
-      cryptoCredentialsProvider.overrideWith(
-        (ref) async => const CryptoCredentialsStatus(configured: false, exchange: CryptoExchange.binance),
-      ),
       activeSignalsProvider.overrideWith((ref) => Stream.value(<SignalModel>[])),
       candlesProvider.overrideWith((ref, args) async {
         final (instrument, interval) = args;

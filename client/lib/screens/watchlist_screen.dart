@@ -5,7 +5,6 @@ import '../models/market_mode.dart';
 import '../models/news_intel.dart';
 import '../providers/app_providers.dart';
 import '../screens/chart_screen.dart';
-import '../screens/crypto_watchlist_screen.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_background.dart';
 import '../widgets/candlestick_chart.dart';
@@ -29,20 +28,6 @@ class WatchlistScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(marketModeProvider);
-    if (mode == MarketMode.crypto) {
-      return const Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: Text('Crypto markets', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-          ),
-          Expanded(child: CryptoWatchlistScreen()),
-        ],
-      );
-    }
-
     final health = ref.watch(healthProvider);
     final predictions = ref.watch(predictionBySymbolProvider);
 

@@ -54,9 +54,9 @@ def evaluate_trade_decision(
 
     if not setup_allowed_in_regime(setup_name, regime.regime):
         fit_map = {
-            Regime.TRENDING: "Use ORB, EMA pullback, or VWAP trend on trending days",
+            Regime.TRENDING: "Use FVG retest, liquidity sweep, ORB, or VWAP on trending days",
             Regime.RANGING: "Sit out or use spreads",
-            Regime.VOLATILE: "Breakout with reduced size only",
+            Regime.VOLATILE: "FVG + sweep with reduced size only",
         }
         return {
             **base,
@@ -105,7 +105,7 @@ def evaluate_trade_decision(
         "trade_decision": "TAKE",
         "decision_reason": (
             f"Trending day, setup matches regime, R:R {rr:.1f}. "
-            f"{'ORB best in first hour.' if setup_name == 'orb_breakout' else 'Clean directional setup.'}"
+            f"{'ORB best in first hour.' if setup_name == 'orb_breakout' else 'FVG/SMC + news alignment favoured.'}"
         ),
         "strategy_fit": "trending — directional buy",
         "size_modifier": 1.0,

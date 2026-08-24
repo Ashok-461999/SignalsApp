@@ -26,6 +26,8 @@ from app.signals.registry import get_stats, is_tradable
 from app.signals.schemas import SignalPayload
 from app.signals.setups import SETUP_FUNCTIONS
 from app.signals.trade_decision import evaluate_trade_decision
+from app.services.market_news import get_enriched_headlines
+from app.services.market_predictions import news_bias_for_instrument
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +136,8 @@ class SignalScanner:
         }
 
         evaluations: list[dict] = []
+        headlines = get_enriched_headlines(max_items=12)
+        news_line = news_bias_for_instrument(instrument, headlines)
 
         # Ranging day sit-out advisory (no setup needed)
         from app.signals.regime import Regime
@@ -251,6 +255,11 @@ class SignalScanner:
             sig["setup_description"] = SETUP_DESCRIPTIONS.get(setup_name, "")
             sig["adx"] = regime_snap.adx
             sig["atr_percentile"] = regime_snap.atr_percentile
+
+            if news_line and decision["trade_decision"] == "TAKE":
+                sig["decision_reason"] = f"{decision['decision_reason']} | {news_line}"
+            elif news_line and result.fired:
+                sig["news_bias"] = news_line
 
             if decision["trade_decision"] == "TAKE":
                 logger.info(

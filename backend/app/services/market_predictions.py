@@ -100,6 +100,68 @@ def enrich_headlines(headlines: list[dict]) -> list[dict]:
     return out
 
 
+def _why_bullish_bearish(symbol: str, headlines: list[dict]) -> tuple[list[str], list[str]]:
+    """Plain-English reasons market may move up or down from headlines."""
+    bulls: list[str] = []
+    bears: list[str] = []
+    for h in headlines:
+        title = h.get("title", "")
+        analysis = h if "sentiment" in h else analyze_headline(title)
+        if symbol not in (analysis.get("symbols") or []):
+            continue
+        sent = analysis.get("sentiment", "neutral")
+        short = title[:90] + ("…" if len(title) > 90 else "")
+        if sent == "bullish":
+            bulls.append(short)
+        elif sent == "bearish":
+            bears.append(short)
+    return bulls[:4], bears[:4]
+
+
+def move_reason_for_symbol(
+    symbol: str,
+    outlook: str,
+    setup_hits: list[dict],
+    news_outlook: str,
+    tech_outlook: str,
+    move_pts: int,
+    direction: str,
+) -> tuple[list[str], list[str], str]:
+    """Build why bullish/bearish lists and one-line move reason."""
+    bulls: list[str] = []
+    bears: list[str] = []
+
+    if news_outlook == "bullish":
+        bulls.append("Live headlines lean bullish — flows may support upside")
+    elif news_outlook == "bearish":
+        bears.append("Live headlines lean bearish — risk-off or profit-taking likely")
+
+    for hit in setup_hits:
+        if hit.get("direction") == "bullish":
+            bulls.append(f"{hit.get('label', hit.get('name', 'Setup'))}: {hit.get('reason', 'triggered')}")
+        elif hit.get("direction") == "bearish":
+            bears.append(f"{hit.get('label', hit.get('name', 'Setup'))}: {hit.get('reason', 'triggered')}")
+
+    if tech_outlook == "bullish":
+        bulls.append("Price structure + momentum favour higher levels (no EMA lag)")
+    elif tech_outlook == "bearish":
+        bears.append("Price structure + momentum favour lower levels")
+
+    if not bulls and outlook == "bullish":
+        bulls.append("Composite model tilts up — confirm with FVG retest on 5m")
+    if not bears and outlook == "bearish":
+        bears.append("Composite model tilts down — confirm with liquidity sweep or FVG")
+
+    if direction == "up":
+        move_reason = f"Bias UP ~{move_pts} pts — news + FVG/SMC setups align bullish"
+    elif direction == "down":
+        move_reason = f"Bias DOWN ~{move_pts} pts — news + structure align bearish"
+    else:
+        move_reason = f"Mixed signals — range ±{move_pts // 2} pts until FVG break"
+
+    return bulls[:5], bears[:5], move_reason
+
+
 def aggregate_predictions(headlines: list[dict]) -> list[dict]:
     """Per-symbol outlook from all headlines."""
     scores: dict[str, list[int]] = defaultdict(list)
@@ -128,6 +190,7 @@ def aggregate_predictions(headlines: list[dict]) -> list[dict]:
         else:
             outlook = "neutral"
         profile = SYMBOL_PROFILES[symbol]
+        why_bull, why_bear = _why_bullish_bearish(symbol, headlines)
         predictions.append({
             "symbol": symbol,
             "name": profile["name"],
@@ -137,6 +200,8 @@ def aggregate_predictions(headlines: list[dict]) -> list[dict]:
             "headline_count": len(headlines_by_symbol[symbol]),
             "prediction": _prediction_text(outlook, [symbol]),
             "option_hint": _option_hint(symbol, outlook),
+            "why_bullish": why_bull,
+            "why_bearish": why_bear,
         })
 
     predictions.sort(key=lambda p: (-p["headline_count"], p["symbol"]))

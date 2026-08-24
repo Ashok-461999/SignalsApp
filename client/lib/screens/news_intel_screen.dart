@@ -7,11 +7,27 @@ import '../theme/app_theme.dart';
 import '../widgets/app_background.dart';
 import '../widgets/status_widgets.dart';
 
-class NewsIntelScreen extends ConsumerWidget {
+enum _NewsFilter { all, india, global }
+
+class NewsIntelScreen extends ConsumerStatefulWidget {
   const NewsIntelScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NewsIntelScreen> createState() => _NewsIntelScreenState();
+}
+
+class _NewsIntelScreenState extends ConsumerState<NewsIntelScreen> {
+  _NewsFilter _filter = _NewsFilter.all;
+  bool _showAnalysis = false;
+
+  List<NewsHeadline> _filtered(List<NewsHeadline> items) => switch (_filter) {
+        _NewsFilter.india => items.where((h) => h.isIndian).toList(),
+        _NewsFilter.global => items.where((h) => h.isGlobal).toList(),
+        _ => items,
+      };
+
+  @override
+  Widget build(BuildContext context) {
     final intel = ref.watch(marketIntelProvider);
 
     return intel.when(
@@ -21,7 +37,7 @@ class NewsIntelScreen extends ConsumerWidget {
           children: [
             CircularProgressIndicator(color: AppColors.accent),
             SizedBox(height: 12),
-            Text('Fetching live news…', style: TextStyle(color: AppColors.textMuted)),
+            Text('Loading live news…', style: TextStyle(color: AppColors.textMuted)),
           ],
         ),
       ),
@@ -35,48 +51,319 @@ class NewsIntelScreen extends ConsumerWidget {
           ref.invalidate(marketIntelProvider);
           await ref.read(marketIntelProvider.future);
         },
-        child: ListView(
+        child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-          children: [
-            Row(
-              children: [
-                const Text('Market intel', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded),
-                  onPressed: () => ref.invalidate(marketIntelProvider),
+          slivers: [
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Live news',
+                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.refresh_rounded),
+                      onPressed: () => ref.invalidate(marketIntelProvider),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            if (data.disclaimer.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(data.disclaimer, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
               ),
-            const Text('Index move targets (~100 pts)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            const Text(
-              'Advanced models: ORB, EMA, VWAP, range + news momentum',
-              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
-            const SizedBox(height: 8),
-            ...data.predictions.map((p) => _PredictionCard(p: p)),
-            const SizedBox(height: 16),
-            const Text('Live headlines', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Indian & global markets — Moneycontrol, ET, Reuters & more',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _FilterChip(
+                      label: 'All',
+                      selected: _filter == _NewsFilter.all,
+                      onTap: () => setState(() => _filter = _NewsFilter.all),
+                    ),
+                    _FilterChip(
+                      label: 'India',
+                      selected: _filter == _NewsFilter.india,
+                      onTap: () => setState(() => _filter = _NewsFilter.india),
+                    ),
+                    _FilterChip(
+                      label: 'Global',
+                      selected: _filter == _NewsFilter.global,
+                      onTap: () => setState(() => _filter = _NewsFilter.global),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             if (data.headlines.isEmpty)
-              const Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(child: Text('No headlines right now', style: TextStyle(color: AppColors.textMuted))),
+              const SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(child: Text('No headlines — pull to refresh', style: TextStyle(color: AppColors.textMuted))),
               )
             else
-              ...data.headlines.map((h) => _HeadlineCard(h: h)),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final headlines = _filtered(data.headlines);
+                    if (index >= headlines.length) return null;
+                    return Padding(
+                      padding: EdgeInsets.fromLTRB(16, index == 0 ? 0 : 0, 16, 8),
+                      child: _NewsFeedCard(h: headlines[index]),
+                    );
+                  },
+                  childCount: _filtered(data.headlines).length,
+                ),
+              ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => setState(() => _showAnalysis = !_showAnalysis),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceHigh.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'GIFT Nifty & trade analysis',
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Icon(_showAnalysis ? Icons.expand_less : Icons.expand_more, color: AppColors.textMuted),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (_showAnalysis) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: _GiftNiftyCard(gift: data.giftNifty),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: _MarketBiasSummary(predictions: data.predictions),
+                ),
+              ),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) => Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: _PredictionCard(p: data.predictions[index]),
+                  ),
+                  childCount: data.predictions.length,
+                ),
+              ),
+            ],
+            const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
           ],
         ),
       ),
     );
   }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      showCheckmark: false,
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: selected ? AppColors.accent : AppColors.textMuted,
+      ),
+      selectedColor: AppColors.accent.withValues(alpha: 0.18),
+      backgroundColor: AppColors.surfaceHigh.withValues(alpha: 0.5),
+      side: BorderSide(color: selected ? AppColors.accent.withValues(alpha: 0.5) : AppColors.border),
+    );
+  }
+}
+
+class _NewsFeedCard extends StatelessWidget {
+  const _NewsFeedCard({required this.h});
+  final NewsHeadline h;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = switch (h.sentiment) {
+      'bullish' => AppColors.profit,
+      'bearish' => AppColors.loss,
+      _ => AppColors.textMuted,
+    };
+    final regionColor = h.isGlobal ? AppColors.warn : AppColors.accent;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.65)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _tag(h.isGlobal ? 'GLOBAL' : 'INDIA', regionColor),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  h.source,
+                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              _tag(h.sentiment.toUpperCase(), accent),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            h.title,
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, height: 1.35),
+          ),
+          if (h.prediction.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              h.prediction,
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+          if (h.symbols.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: h.symbols
+                  .take(4)
+                  .map((s) => Chip(
+                        label: Text(s, style: const TextStyle(fontSize: 10)),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ))
+                  .toList(),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _tag(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(5),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(text, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: color)),
+      );
+}
+
+class _GiftNiftyCard extends StatelessWidget {
+  const _GiftNiftyCard({required this.gift});
+  final GiftNiftyInsight gift;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!gift.available) {
+      return AlphaSurface(
+        accent: AppColors.warn,
+        padding: const EdgeInsets.all(14),
+        child: Text(
+          gift.summary.isNotEmpty ? gift.summary : 'GIFT Nifty data unavailable',
+          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+        ),
+      );
+    }
+
+    final negative = gift.sessionClose == 'negative';
+    final positive = gift.sessionClose == 'positive';
+    final accent = negative ? AppColors.loss : positive ? AppColors.profit : AppColors.warn;
+
+    return AlphaSurface(
+      accent: accent,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('GIFT Nifty → Nifty open', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 8),
+          if (gift.lastPrice != null)
+            Text(
+              '${gift.lastPrice!.toStringAsFixed(1)} (${gift.changePct != null ? '${gift.changePct! >= 0 ? '+' : ''}${gift.changePct!.toStringAsFixed(2)}%' : ''})',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: accent),
+            ),
+          const SizedBox(height: 6),
+          Text(gift.summary, style: const TextStyle(fontSize: 12, height: 1.35)),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _probTile('Gap DOWN', '${gift.negativeOpenProbability}%', AppColors.loss)),
+              const SizedBox(width: 8),
+              Expanded(child: _probTile('Gap UP', '${gift.positiveOpenProbability}%', AppColors.profit)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _probTile(String label, String value, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppColors.bg.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Column(
+          children: [
+            Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700)),
+            Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: color)),
+          ],
+        ),
+      );
 }
 
 class _PredictionCard extends StatelessWidget {
@@ -91,132 +378,84 @@ class _PredictionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: AlphaSurface(
-        accent: _accent,
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(
-                  p.symbol,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                ),
-                const SizedBox(width: 8),
-                Text(p.name, style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                const Spacer(),
-                _chip(p.outlook.toUpperCase(), _accent),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              '${p.confidence}% confidence · ${p.headlineCount} headline(s)',
-              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-            ),
-            if (p.movePoints != null && p.movePoints! > 0) ...[
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.bg.withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: _accent.withValues(alpha: 0.25)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      p.moveLabel,
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _accent),
-                    ),
-                    if (p.spotPrice != null && p.targetPrice != null)
-                      Text(
-                        '${p.spotPrice!.toStringAsFixed(1)} → ${p.targetPrice!.toStringAsFixed(1)}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                      ),
-                    if (p.strategy.isNotEmpty)
-                      Text('Strategy: ${p.strategy}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  ],
+    return AlphaSurface(
+      accent: _accent,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(p.symbol, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  p.name,
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 11),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
+              _chip(p.outlook.toUpperCase(), _accent),
             ],
-            if (p.models.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                children: p.models.map((m) => Chip(label: Text(m, style: const TextStyle(fontSize: 10)))).toList(),
-              ),
-            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${p.confidence}% · ${p.headlineCount} headline(s)',
+            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+          ),
+          if (p.moveLabel.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(p.optionHint, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            Text(p.prediction, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            Text(p.moveLabel, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: _accent)),
           ],
-        ),
+          if (p.moveReason.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(p.moveReason, style: const TextStyle(fontSize: 12, height: 1.35), maxLines: 4, overflow: TextOverflow.ellipsis),
+          ],
+        ],
       ),
     );
   }
 
   Widget _chip(String text, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
-        child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color)),
+        child: Text(text, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: color)),
       );
 }
 
-class _HeadlineCard extends StatelessWidget {
-  const _HeadlineCard({required this.h});
-  final NewsHeadline h;
+class _MarketBiasSummary extends StatelessWidget {
+  const _MarketBiasSummary({required this.predictions});
+  final List<SymbolPrediction> predictions;
 
   @override
   Widget build(BuildContext context) {
-    final accent = switch (h.sentiment) {
-      'bullish' => AppColors.profit,
-      'bearish' => AppColors.loss,
-      _ => AppColors.textMuted,
-    };
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppColors.surface.withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text(h.source, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                const Spacer(),
-                Text(h.sentiment.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: accent)),
-              ],
-            ),
+    final indices = predictions.where((p) => p.type == 'index').take(4).toList();
+    if (indices.isEmpty) return const SizedBox.shrink();
+
+    final bullish = indices.where((p) => p.outlook == 'bullish').map((p) => p.symbol).join(', ');
+    final bearish = indices.where((p) => p.outlook == 'bearish').map((p) => p.symbol).join(', ');
+
+    return AlphaSurface(
+      accent: AppColors.accent,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Index bias', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+          if (bullish.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(h.title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            if (h.symbols.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: h.symbols.map((s) => Chip(label: Text(s, style: const TextStyle(fontSize: 10)))).toList(),
-              ),
-            ],
-            if (h.prediction.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(h.prediction, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
-            ],
+            Text('Bullish: $bullish', style: const TextStyle(fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
           ],
-        ),
+          if (bearish.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('Bearish: $bearish', style: const TextStyle(fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),
+          ],
+        ],
       ),
     );
   }

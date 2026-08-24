@@ -13,7 +13,7 @@ import 'services/notification_service.dart';
 import 'theme/app_branding.dart';
 import 'theme/app_theme.dart';
 import 'widgets/app_background.dart';
-import 'widgets/market_mode_switcher.dart';
+import 'widgets/app_header.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -81,7 +81,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         backgroundColor: Colors.transparent,
         body: Column(
           children: [
-            const MarketModeSwitcher(),
+            const AppHeader(),
             Expanded(child: IndexedStack(index: _index, children: _screens)),
           ],
         ),
@@ -113,7 +113,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   NavigationDestination(
                     icon: Icon(Icons.newspaper_outlined),
                     selectedIcon: Icon(Icons.newspaper_rounded),
-                    label: 'Intel',
+                    label: 'News',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.bolt_outlined),

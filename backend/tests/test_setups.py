@@ -19,15 +19,12 @@ def test_orb_breakout_fires_bullish():
     assert result.entry > result.stop_loss
 
 
-def test_ema_trend_continuation_evaluates():
+def test_ema_trend_continuation_disabled():
     df = ema_continuation_bullish_df()
     result = ema_trend_continuation(df)
-    # May or may not fire depending on EMA calc — ensure no crash and valid structure
     assert result.setup_name == "ema_trend_continuation"
-    if result.fired:
-        assert result.direction in ("bullish", "bearish")
-        assert result.entry is not None
-        assert result.stop_loss is not None
+    assert result.fired is False
+    assert "FVG" in (result.reason or "")
 
 
 def test_range_break_fires_bullish():

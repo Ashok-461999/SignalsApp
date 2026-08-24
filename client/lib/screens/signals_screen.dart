@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/market_mode.dart';
 import '../models/models.dart';
 import '../models/news_intel.dart';
 import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_background.dart';
-import '../widgets/market_mode_switcher.dart';
 import '../widgets/status_widgets.dart';
 import 'setup_detail_screen.dart';
 
@@ -16,27 +14,26 @@ class SignalsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(marketModeProvider);
-    if (mode == MarketMode.crypto) {
-      return const CustomScrollView(
-        slivers: [
-          SliverFillRemaining(
-            child: CryptoComingSoon(
-              title: 'Crypto signals coming soon',
-              subtitle: 'ORB, trend & breakout setups for BTC, ETH & majors — same engine, 24/7 market.',
-            ),
-          ),
-        ],
-      );
-    }
-
     final health = ref.watch(healthProvider);
     final signals = ref.watch(activeSignalsProvider);
     final regimes = ref.watch(regimesProvider);
     final predictions = ref.watch(predictionBySymbolProvider);
+    final intel = ref.watch(marketIntelProvider);
 
     return CustomScrollView(
       slivers: [
+        SliverToBoxAdapter(
+          child: intel.when(
+            data: (data) => data.giftNifty.available
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                    child: _GiftNiftyBanner(gift: data.giftNifty),
+                  )
+                : const SizedBox.shrink(),
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
+          ),
+        ),
         SliverToBoxAdapter(
           child: health.when(
             data: (h) {
@@ -165,12 +162,48 @@ class SignalsScreen extends ConsumerWidget {
             Text('How to read signals', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             SizedBox(height: 16),
             _GuideRow(icon: Icons.check_circle_rounded, color: AppColors.profit, text: 'TAKE — buy the option shown (strike + CE/PE) in your broker'),
-            _GuideRow(icon: Icons.pause_circle_rounded, color: AppColors.warn, text: 'NO_TRADE — setup fired but skip (bad regime or R:R)'),
+            _GuideRow(icon: Icons.pause_circle_rounded, color: AppColors.warn, text: 'NO_TRADE — FVG/sweep fired but skip (bad regime or R:R)'),
             _GuideRow(icon: Icons.nightlight_round, color: AppColors.textMuted, text: 'SIT_OUT — ranging day, avoid buying options'),
             SizedBox(height: 8),
+            _GuideRow(icon: Icons.candlestick_chart_rounded, color: AppColors.accent, text: 'Setups: FVG retest & liquidity sweep (not EMA) + news on Intel tab'),
             _GuideRow(icon: Icons.calendar_month_rounded, color: AppColors.accent, text: 'Expiry is 20+ days out (monthly-style) — matches your holding style'),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _GiftNiftyBanner extends StatelessWidget {
+  const _GiftNiftyBanner({required this.gift});
+  final GiftNiftyInsight gift;
+
+  @override
+  Widget build(BuildContext context) {
+    final negative = gift.predictedNiftyOpen == 'negative';
+    final positive = gift.predictedNiftyOpen == 'positive';
+    final color = negative ? AppColors.loss : positive ? AppColors.profit : AppColors.warn;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            negative ? Icons.trending_down_rounded : positive ? Icons.trending_up_rounded : Icons.horizontal_rule_rounded,
+            color: color,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              gift.summary,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -333,6 +366,23 @@ class _SignalCard extends StatelessWidget {
             ],
             if (newsOutlook != null) ...[
               const SizedBox(height: 8),
+              if (newsOutlook!.whyBullish.isNotEmpty || newsOutlook!.whyBearish.isNotEmpty) ...[
+                if (newsOutlook!.whyBullish.isNotEmpty)
+                  Text(
+                    '↑ ${newsOutlook!.whyBullish.first}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppColors.profit),
+                  ),
+                if (newsOutlook!.whyBearish.isNotEmpty)
+                  Text(
+                    '↓ ${newsOutlook!.whyBearish.first}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, color: AppColors.loss),
+                  ),
+                const SizedBox(height: 4),
+              ],
               Row(
                 children: [
                   Icon(

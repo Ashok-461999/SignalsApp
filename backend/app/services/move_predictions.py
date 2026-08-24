@@ -10,19 +10,22 @@ from sqlalchemy.orm import Session
 
 from app.core.index_config import INDEX_SYMBOLS, MOVE_POINT_TARGETS
 from app.data.candle_fetcher import candle_fetcher
-from app.services.market_predictions import SYMBOL_PROFILES, aggregate_predictions
+from app.services.market_predictions import SYMBOL_PROFILES, aggregate_predictions, move_reason_for_symbol
+from app.services.gift_nifty import gift_bias_lines
 from app.signals.indicators import add_standard_indicators, ensure_ohlcv
 from app.signals.setups import SETUP_FUNCTIONS
 
 logger = logging.getLogger(__name__)
 
 STRATEGY_LABELS: dict[str, str] = {
+    "fvg_retest": "FVG retest (SMC)",
+    "liquidity_sweep": "Liquidity sweep",
     "orb_breakout": "ORB breakout",
-    "ema_trend_continuation": "EMA trend continuation",
     "vwap_trend": "VWAP trend",
     "range_break": "Range expansion",
     "news_momentum": "News momentum",
     "atr_expansion": "ATR expansion",
+    "structure_trend": "Market structure",
     "mean_reversion": "Mean reversion",
 }
 
@@ -64,8 +67,24 @@ def _scan_setups(df: pd.DataFrame) -> list[dict[str, Any]]:
     return fired
 
 
+def _structure_bias(d: pd.DataFrame) -> str:
+    """Higher-high / lower-low structure — no lagging EMA."""
+    if len(d) < 10:
+        return "neutral"
+    recent = d.tail(8)
+    highs = recent["high"].values
+    lows = recent["low"].values
+    hh = highs[-1] > highs[-4] and highs[-4] > highs[0]
+    ll = lows[-1] < lows[-4] and lows[-4] < lows[0]
+    if hh and not ll:
+        return "bullish"
+    if ll and not hh:
+        return "bearish"
+    return "neutral"
+
+
 def _technical_bias(df: pd.DataFrame) -> tuple[str, list[str], float]:
-    """Return outlook, model tags, momentum score."""
+    """Return outlook, model tags, momentum score — structure + momentum, not EMA."""
     if len(df) < 20:
         return "neutral", [], 0.0
 
@@ -85,9 +104,12 @@ def _technical_bias(df: pd.DataFrame) -> tuple[str, list[str], float]:
         models.append("Bearish momentum")
         return "bearish", models, mom
 
-    if float(last["ema_20"]) > float(last["ema_50"]) and mom > 0:
+    struct = _structure_bias(d)
+    if struct == "bullish" and mom > 0:
+        models.append(STRATEGY_LABELS["structure_trend"])
         return "bullish", models, mom
-    if float(last["ema_20"]) < float(last["ema_50"]) and mom < 0:
+    if struct == "bearish" and mom < 0:
+        models.append(STRATEGY_LABELS["structure_trend"])
         return "bearish", models, mom
 
     if abs(mom) < 8:
@@ -95,9 +117,15 @@ def _technical_bias(df: pd.DataFrame) -> tuple[str, list[str], float]:
     return "neutral", models, mom
 
 
-def build_move_targets(session: Session, headlines: list[dict]) -> list[dict]:
+def build_move_targets(
+    session: Session,
+    headlines: list[dict],
+    gift_insight: dict | None = None,
+) -> list[dict]:
     """Per-index advanced outlook with ~100pt (scaled) move targets."""
     news_map = {p["symbol"]: p for p in aggregate_predictions(headlines)}
+    gift = gift_insight or {}
+    gift_bull, gift_bear = gift_bias_lines(gift) if gift.get("available") else (None, None)
     targets: list[dict] = []
 
     for symbol in INDEX_SYMBOLS:
@@ -128,22 +156,34 @@ def build_move_targets(session: Session, headlines: list[dict]) -> list[dict]:
         news = news_map.get(symbol, {})
         news_outlook = news.get("outlook", "neutral")
         news_conf = int(news.get("confidence", 50))
+        confidence_boost = 0
 
-        # Weighted direction score
+        # News-first weighted direction score
         score = 0
         if news_outlook == "bullish":
-            score += 2
+            score += 3
         elif news_outlook == "bearish":
-            score -= 2
+            score -= 3
         if tech_outlook == "bullish":
-            score += 2
+            score += 1
         elif tech_outlook == "bearish":
-            score -= 2
+            score -= 1
         for hit in setup_hits:
             if hit["direction"] == "bullish":
-                score += 3
+                score += 4
             elif hit["direction"] == "bearish":
+                score -= 4
+
+        # GIFT Nifty pre-open cue (Nifty 50 only — strongest overnight indicator)
+        if symbol == "NIFTY" and gift.get("available"):
+            gift_chg = float(gift.get("change_pct", 0))
+            if gift_chg < -0.05:
                 score -= 3
+            elif gift_chg > 0.05:
+                score += 3
+            neg_prob = float(gift.get("negative_open_probability", 50))
+            if gift_chg < -0.05 and neg_prob >= 70:
+                confidence_boost = 8
 
         if score >= 2:
             direction = "up"
@@ -165,7 +205,31 @@ def build_move_targets(session: Session, headlines: list[dict]) -> list[dict]:
             primary_strategy = STRATEGY_LABELS["news_momentum"]
             models.insert(0, primary_strategy)
 
-        confidence = min(95, max(35, news_conf + len(setup_hits) * 8 + (10 if abs(mom) > 20 else 0)))
+        confidence = min(
+            95,
+            max(35, news_conf + len(setup_hits) * 8 + (10 if abs(mom) > 20 else 0) + confidence_boost),
+        )
+
+        why_bull, why_bear, move_reason = move_reason_for_symbol(
+            symbol, outlook, setup_hits, news_outlook, tech_outlook, move_pts, direction
+        )
+        if symbol == "NIFTY" and gift_bull:
+            why_bull.insert(0, gift_bull)
+        if symbol == "NIFTY" and gift_bear:
+            why_bear.insert(0, gift_bear)
+        if symbol == "NIFTY" and gift.get("available") and gift.get("summary"):
+            move_reason = f"{gift['summary']}. {move_reason}"
+        # Merge headline-specific reasons from news aggregate
+        news_why_bull = news.get("why_bullish") or []
+        news_why_bear = news.get("why_bearish") or []
+        for line in news_why_bull:
+            if line not in why_bull:
+                why_bull.insert(0, line)
+        for line in news_why_bear:
+            if line not in why_bear:
+                why_bear.insert(0, line)
+        why_bull = why_bull[:5]
+        why_bear = why_bear[:5]
 
         target_price = round(spot + (move_pts if direction == "up" else -move_pts if direction == "down" else 0), 1)
         if spot <= 0:
@@ -200,6 +264,10 @@ def build_move_targets(session: Session, headlines: list[dict]) -> list[dict]:
                     f"Buy {'CE' if outlook == 'bullish' else 'PE' if outlook == 'bearish' else 'ATM spreads'} "
                     f"for ~{move_pts}pt move (20+ DTE)."
                 ),
+                "why_bullish": why_bull,
+                "why_bearish": why_bear,
+                "move_reason": move_reason,
+                "gift_nifty": gift if symbol == "NIFTY" and gift.get("available") else None,
             }
         )
 

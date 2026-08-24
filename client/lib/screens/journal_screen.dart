@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../models/market_mode.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../providers/app_providers.dart';
@@ -21,11 +20,6 @@ class _JournalScreenState extends ConsumerState<JournalScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final mode = ref.watch(marketModeProvider);
-    if (mode == MarketMode.crypto) {
-      return const _CryptoTradesJournal();
-    }
-
     final journal = ref.watch(journalProvider);
 
     return journal.when(
@@ -375,115 +369,6 @@ class _JournalTile extends StatelessWidget {
               if (context.mounted) Navigator.pop(ctx);
             },
             child: const Text('Save & close trade'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CryptoTradesJournal extends ConsumerStatefulWidget {
-  const _CryptoTradesJournal();
-
-  @override
-  ConsumerState<_CryptoTradesJournal> createState() => _CryptoTradesJournalState();
-}
-
-class _CryptoTradesJournalState extends ConsumerState<_CryptoTradesJournal> {
-  String _symbol = 'BTC';
-
-  @override
-  Widget build(BuildContext context) {
-    final trades = ref.watch(cryptoTradesProvider(_symbol));
-    final balances = ref.watch(cryptoBalancesProvider);
-
-    return RefreshIndicator(
-      onRefresh: () async {
-        ref.invalidate(cryptoTradesProvider(_symbol));
-        ref.invalidate(cryptoBalancesProvider);
-      },
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-        children: [
-          const Text('Crypto trades', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          const Text(
-            'Recent fills from your exchange (requires API keys on server).',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 12),
-          balances.when(
-            data: (list) {
-              if (list.isEmpty) return const SizedBox.shrink();
-              return Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Wallet', style: TextStyle(fontWeight: FontWeight.w700)),
-                      ...list.take(6).map(
-                            (b) => ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              title: Text(b['asset'] as String? ?? ''),
-                              trailing: Text(
-                                ((b['free'] as num?)?.toDouble() ?? 0).toStringAsFixed(4),
-                              ),
-                            ),
-                          ),
-                    ],
-                  ),
-                ),
-              );
-            },
-            loading: () => const LinearProgressIndicator(),
-            error: (e, _) => Text('Balances: $e', style: const TextStyle(color: AppColors.loss)),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            children: ['BTC', 'ETH', 'SOL', 'BNB'].map((s) {
-              final selected = _symbol == s;
-              return ChoiceChip(
-                label: Text(s),
-                selected: selected,
-                onSelected: (_) => setState(() => _symbol = s),
-              );
-            }).toList(),
-          ),
-          const SizedBox(height: 12),
-          trades.when(
-            data: (list) {
-              if (list.isEmpty) {
-                return Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Center(child: Text('No recent trades for $_symbol')),
-                );
-              }
-              return Column(
-                children: list.map((t) {
-                  final side = (t['side'] as String? ?? '').toUpperCase();
-                  final isBuy = side == 'BUY';
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        isBuy ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
-                        color: isBuy ? AppColors.profit : AppColors.loss,
-                      ),
-                      title: Text('$side ${t['symbol'] ?? _symbol}'),
-                      subtitle: Text(
-                        'Qty ${t['quantity']} @ ${t['price']}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  );
-                }).toList(),
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('$e', style: const TextStyle(color: AppColors.loss)),
           ),
         ],
       ),

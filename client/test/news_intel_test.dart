@@ -32,9 +32,31 @@ void main() {
     expect(data.predictions, hasLength(1));
     expect(data.predictions.first.symbol, 'NIFTY');
     expect(data.predictions.first.optionHint, 'Prefer CE on dips');
+    expect(data.predictions.first.whyBullish, isEmpty);
+    expect(data.predictions.first.moveReason, '');
     expect(data.headlines, hasLength(1));
     expect(data.headlines.first.symbols, ['NIFTY']);
     expect(data.disclaimer, 'Not advice');
+  });
+
+  test('MarketIntelResponse parses gift nifty block', () {
+    final data = MarketIntelResponse.fromJson({
+      'gift_nifty': {
+        'available': true,
+        'last_price': 24200.5,
+        'change_pct': -0.35,
+        'session_close': 'negative',
+        'predicted_nifty_open': 'negative',
+        'negative_open_probability': 78,
+        'positive_open_probability': 22,
+        'summary': 'GIFT negative — likely gap down',
+      },
+      'predictions': [],
+      'headlines': [],
+    });
+    expect(data.giftNifty.available, isTrue);
+    expect(data.giftNifty.negativeOpenProbability, 78);
+    expect(data.giftNifty.predictedNiftyOpen, 'negative');
   });
 
   test('MarketIntelResponse tolerates empty payload', () {

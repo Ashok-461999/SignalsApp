@@ -55,9 +55,9 @@ def get_regimes() -> dict:
             for inst in INDEX_SYMBOLS
         },
         "strategy_guide": {
-            "trending": "ORB, EMA pullback, VWAP trend — directional buying works",
+            "trending": "FVG retest, liquidity sweep, ORB, VWAP — directional buying works",
             "ranging": "SIT OUT — theta eats option buyers; use spreads or skip",
-            "volatile": "Breakout only, size down, IV-aware",
+            "volatile": "FVG + sweep only, size down, IV-aware",
         },
     }
 

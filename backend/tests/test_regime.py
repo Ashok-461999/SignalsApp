@@ -38,7 +38,7 @@ def test_ranging_regime_sit_out():
         assert decision["trade_decision"] == "SIT_OUT"
 
 
-def test_take_on_trending_ema_setup():
+def test_take_on_trending_fvg_setup():
     snap = RegimeSnapshot(
         regime=Regime.TRENDING,
         adx=30,
@@ -47,17 +47,17 @@ def test_take_on_trending_ema_setup():
         summary="trending",
     )
     result = SetupResult(
-        setup_name="ema_trend_continuation",
+        setup_name="fvg_retest",
         fired=True,
         direction="bullish",
         entry=24500,
-        stop_loss=24450,
-        targets=[24600, 24650],
-        reason="EMA pullback",
+        stop_loss=24400,
+        targets=[24700, 24800],
+        reason="bullish FVG retest",
     )
-    decision = evaluate_trade_decision("ema_trend_continuation", result, snap, iv_percentile=45)
+    decision = evaluate_trade_decision("fvg_retest", result, snap, iv_percentile=45)
     assert decision["trade_decision"] == "TAKE"
-    assert setup_allowed_in_regime("ema_trend_continuation", Regime.TRENDING)
+    assert setup_allowed_in_regime("fvg_retest", Regime.TRENDING)
 
 
 def test_no_trade_wrong_regime():
@@ -69,14 +69,14 @@ def test_no_trade_wrong_regime():
         summary="ranging",
     )
     result = SetupResult(
-        setup_name="ema_trend_continuation",
+        setup_name="fvg_retest",
         fired=True,
         direction="bullish",
         entry=24500,
         stop_loss=24450,
         targets=[24600],
     )
-    decision = evaluate_trade_decision("ema_trend_continuation", result, snap, 50)
+    decision = evaluate_trade_decision("fvg_retest", result, snap, 50)
     assert decision["trade_decision"] == "SIT_OUT"
 
 
