@@ -17,6 +17,7 @@ from app.backtest.options import (
     strike_step,
 )
 from app.config import get_settings
+from app.core.index_config import INDEX_SYMBOLS, LOT_SIZES
 from app.data.models import Candle, SignalLog
 from app.db.session import SyncSessionLocal
 from app.signals.iv import DEFAULT_IV, compute_iv_percentile
@@ -28,7 +29,6 @@ from app.signals.trade_decision import evaluate_trade_decision
 
 logger = logging.getLogger(__name__)
 
-LOT_SIZES = {"NIFTY": 25, "BANKNIFTY": 15, "SENSEX": 10}
 SCAN_INTERVAL = "5m"
 LOOKBACK = 120
 

@@ -26,6 +26,7 @@ SCRIP_MASTER_URL = (
 FUTURES_CONFIG = {
     "NIFTY": {"exchange": "NFO", "ws_exchange_type": WS_NSE_FO, "name": "NIFTY"},
     "BANKNIFTY": {"exchange": "NFO", "ws_exchange_type": WS_NSE_FO, "name": "BANKNIFTY"},
+    "FINNIFTY": {"exchange": "NFO", "ws_exchange_type": WS_NSE_FO, "name": "FINNIFTY"},
     "SENSEX": {"exchange": "BFO", "ws_exchange_type": WS_BSE_FO, "name": "SENSEX"},
 }
 

@@ -12,7 +12,7 @@ from app.services.trading_settings import load_trading_settings
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/execution", tags=["execution"])
 
-LOT_SIZES = {"NIFTY": 25, "BANKNIFTY": 15, "SENSEX": 10}
+from app.core.index_config import LOT_SIZES
 
 
 class ExecuteRequest(BaseModel):

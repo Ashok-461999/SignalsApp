@@ -17,6 +17,7 @@ class WatchlistScreen extends ConsumerWidget {
   static const _indices = [
     ('NIFTY', 'NSE 50', Icons.show_chart_rounded),
     ('BANKNIFTY', 'Bank index', Icons.account_balance_rounded),
+    ('FINNIFTY', 'Fin services', Icons.pie_chart_rounded),
     ('SENSEX', 'BSE 30', Icons.trending_up_rounded),
   ];
 
@@ -172,7 +173,7 @@ class WatchlistScreen extends ConsumerWidget {
               ),
             const SizedBox(height: 12),
             const Text(
-              'Options signals run on NIFTY, BANKNIFTY & SENSEX. Stock outlook is news-based.',
+              'Options signals run on NIFTY, BANKNIFTY, FINNIFTY & SENSEX. Stock outlook is news-based.',
               style: TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
           ],

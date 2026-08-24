@@ -35,6 +35,12 @@ class SymbolPrediction {
     required this.headlineCount,
     required this.prediction,
     required this.optionHint,
+    this.spotPrice,
+    this.targetPrice,
+    this.movePoints,
+    this.moveDirection = 'flat',
+    this.strategy = '',
+    this.models = const [],
   });
 
   final String symbol;
@@ -45,6 +51,18 @@ class SymbolPrediction {
   final int headlineCount;
   final String prediction;
   final String optionHint;
+  final double? spotPrice;
+  final double? targetPrice;
+  final int? movePoints;
+  final String moveDirection;
+  final String strategy;
+  final List<String> models;
+
+  String get moveLabel {
+    if (movePoints == null || movePoints! <= 0) return '';
+    final sign = moveDirection == 'up' ? '+' : moveDirection == 'down' ? '-' : '±';
+    return '$sign$movePoints pts';
+  }
 
   factory SymbolPrediction.fromJson(Map<String, dynamic> json) => SymbolPrediction(
         symbol: json['symbol'] as String? ?? '',
@@ -55,6 +73,12 @@ class SymbolPrediction {
         headlineCount: (json['headline_count'] as num?)?.toInt() ?? 0,
         prediction: json['prediction'] as String? ?? '',
         optionHint: json['option_hint'] as String? ?? '',
+        spotPrice: (json['spot_price'] as num?)?.toDouble(),
+        targetPrice: (json['target_price'] as num?)?.toDouble(),
+        movePoints: (json['move_points'] as num?)?.toInt(),
+        moveDirection: json['move_direction'] as String? ?? 'flat',
+        strategy: json['strategy'] as String? ?? '',
+        models: (json['models'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
       );
 }
 

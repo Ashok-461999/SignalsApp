@@ -26,7 +26,7 @@ from app.signals.setups import SETUP_FUNCTIONS
 
 logger = logging.getLogger(__name__)
 
-LOT_SIZES = {"NIFTY": 25, "BANKNIFTY": 15, "SENSEX": 10}
+from app.core.index_config import LOT_SIZES
 DEFAULT_IV = 0.14
 HOLDING_BARS = 30
 

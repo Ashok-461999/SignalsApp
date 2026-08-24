@@ -9,6 +9,7 @@ from collections import defaultdict
 SYMBOL_PROFILES: dict[str, dict] = {
     "NIFTY": {"name": "Nifty 50", "type": "index", "aliases": ["nifty 50", "nifty50", "nifty", "nse index"]},
     "BANKNIFTY": {"name": "Bank Nifty", "type": "index", "aliases": ["bank nifty", "banknifty", "nifty bank"]},
+    "FINNIFTY": {"name": "Fin Nifty", "type": "index", "aliases": ["fin nifty", "finnifty", "nifty financial", "financial services"]},
     "SENSEX": {"name": "Sensex", "type": "index", "aliases": ["sensex", "bse sensex", "bse index"]},
     "RELIANCE": {"name": "Reliance", "type": "stock", "aliases": ["reliance", "ril", "jio", "ambani"]},
     "TCS": {"name": "TCS", "type": "stock", "aliases": ["tcs", "tata consultancy"]},

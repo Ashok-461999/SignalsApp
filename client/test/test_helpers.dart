@@ -1,4 +1,3 @@
-import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signalapp_client/models/candle.dart';
 import 'package:signalapp_client/models/market_mode.dart';

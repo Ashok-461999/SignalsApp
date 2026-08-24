@@ -44,7 +44,9 @@ def otm_strike(spot: float, direction: str, step: int = 50, otm_steps: int = 1) 
 
 
 def strike_step(instrument: str) -> int:
-    return 100 if instrument.upper() == "BANKNIFTY" else 50
+    from app.core.index_config import STRIKE_STEPS
+
+    return STRIKE_STEPS.get(instrument.upper(), 50)
 
 
 def expiry_weekday_for(instrument: str) -> int:

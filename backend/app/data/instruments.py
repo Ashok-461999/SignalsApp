@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from datetime import date
 
+from app.core.index_config import INDEX_SYMBOLS
+
 
 @dataclass
 class Instrument:
@@ -59,6 +61,15 @@ SPOT_INSTRUMENTS: dict[str, Instrument] = {
         ws_token="26009",
         ws_exchange_type=WS_NSE_CM,
     ),
+    "FINNIFTY": Instrument(
+        symbol="FINNIFTY",
+        name="Fin Nifty",
+        exchange="NSE",
+        token="99926037",
+        segment="spot",
+        ws_token="26037",
+        ws_exchange_type=WS_NSE_CM,
+    ),
     "SENSEX": Instrument(
         symbol="SENSEX",
         name="SENSEX",
@@ -107,7 +118,7 @@ INTERVAL_MAX_DAYS: dict[str, int] = {
     "1d": 2000,
 }
 
-BASE_SYMBOLS = ("NIFTY", "BANKNIFTY", "SENSEX")
+BASE_SYMBOLS = INDEX_SYMBOLS
 
 
 def parse_interval(interval: str) -> str:

@@ -7,6 +7,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.index_config import INDEX_SYMBOLS
 from app.data.models import BacktestResult
 from app.signals.setups import SETUP_FUNCTIONS
 
@@ -43,7 +44,7 @@ def is_tradable(setup_name: str, instrument: str, segment: str = "spot") -> bool
 
 def load_latest_from_db(session: Session) -> None:
     for setup_name in SETUP_FUNCTIONS:
-        for instrument in ("NIFTY", "BANKNIFTY", "SENSEX"):
+        for instrument in INDEX_SYMBOLS:
             stmt = (
                 select(BacktestResult)
                 .where(
@@ -79,7 +80,7 @@ def load_latest_from_db(session: Session) -> None:
 def all_setups_summary() -> list[dict[str, Any]]:
     result = []
     for name in SETUP_FUNCTIONS:
-        for instrument in ("NIFTY", "BANKNIFTY", "SENSEX"):
+        for instrument in INDEX_SYMBOLS:
             stats = get_stats(name, instrument)
             result.append(
                 {

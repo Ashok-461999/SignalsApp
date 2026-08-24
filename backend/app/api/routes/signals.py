@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.index_config import INDEX_SYMBOLS
 from app.data.models import SignalLog
 from app.db.session import get_sync_session
 from app.signals.scanner import signal_scanner
@@ -21,7 +22,7 @@ def get_active_signals() -> dict:
     signals = signal_scanner.get_active_signals()
     regimes = {
         inst: signal_scanner.get_regime(inst)
-        for inst in ("NIFTY", "BANKNIFTY", "SENSEX")
+        for inst in INDEX_SYMBOLS
         if signal_scanner.get_regime(inst)
     }
     return {
@@ -51,7 +52,7 @@ def get_regimes() -> dict:
     return {
         "regimes": {
             inst: signal_scanner.get_regime(inst)
-            for inst in ("NIFTY", "BANKNIFTY", "SENSEX")
+            for inst in INDEX_SYMBOLS
         },
         "strategy_guide": {
             "trending": "ORB, EMA pullback, VWAP trend — directional buying works",

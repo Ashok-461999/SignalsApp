@@ -40,7 +40,7 @@ const cryptoWatchlist = [
   CryptoInstrument(symbol: 'BNB', name: 'BNB', quote: 'USDT'),
 ];
 
-const indianIndices = ['NIFTY', 'BANKNIFTY', 'SENSEX'];
+const indianIndices = ['NIFTY', 'BANKNIFTY', 'FINNIFTY', 'SENSEX'];
 
 /// Liquid NSE F&O stocks — news predictions & options context.
 class FnoStock {

@@ -300,6 +300,7 @@ class _JournalTile extends StatelessWidget {
       if (fill == null || exit == null) return;
       final lotSize = switch (entry.instrument.toUpperCase()) {
         'BANKNIFTY' => 15,
+        'FINNIFTY' => 40,
         'SENSEX' => 10,
         _ => 25,
       };

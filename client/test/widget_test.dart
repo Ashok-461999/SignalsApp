@@ -28,14 +28,20 @@ void main() {
           intel: const MarketIntelResponse(
             predictions: [
               SymbolPrediction(
-                symbol: 'NIFTY',
-                name: 'Nifty 50',
-                type: 'index',
-                outlook: 'bullish',
-                confidence: 70,
-                headlineCount: 2,
-                prediction: 'Up bias',
-                optionHint: 'CE on dips',
+        symbol: 'NIFTY',
+        name: 'Nifty 50',
+        type: 'index',
+        outlook: 'bullish',
+        confidence: 70,
+        headlineCount: 2,
+        prediction: 'Up bias',
+        optionHint: 'CE on dips',
+        movePoints: 100,
+        moveDirection: 'up',
+        spotPrice: 25000,
+        targetPrice: 25100,
+        strategy: 'ORB breakout',
+        models: ['ORB breakout', 'News momentum'],
               ),
             ],
             headlines: [
@@ -54,7 +60,8 @@ void main() {
 
     expect(find.text('Market intel'), findsOneWidget);
     expect(find.text('NIFTY'), findsOneWidget);
-    expect(find.text('Markets rise'), findsOneWidget);
+    expect(find.text('+100 pts'), findsOneWidget);
+    expect(find.text('ORB breakout'), findsOneWidget);
     await tester.drag(find.byType(ListView).first, const Offset(0, -200));
     await tester.pump();
   });

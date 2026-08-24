@@ -54,7 +54,12 @@ class NewsIntelScreen extends ConsumerWidget {
                 padding: const EdgeInsets.only(bottom: 12),
                 child: Text(data.disclaimer, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
               ),
-            const Text('Index & F&O outlook', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const Text('Index move targets (~100 pts)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            const Text(
+              'Advanced models: ORB, EMA, VWAP, range + news momentum',
+              style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+            ),
             const SizedBox(height: 8),
             ...data.predictions.map((p) => _PredictionCard(p: p)),
             const SizedBox(height: 16),
@@ -111,6 +116,42 @@ class _PredictionCard extends StatelessWidget {
               '${p.confidence}% confidence · ${p.headlineCount} headline(s)',
               style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
             ),
+            if (p.movePoints != null && p.movePoints! > 0) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.bg.withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _accent.withValues(alpha: 0.25)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p.moveLabel,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _accent),
+                    ),
+                    if (p.spotPrice != null && p.targetPrice != null)
+                      Text(
+                        '${p.spotPrice!.toStringAsFixed(1)} → ${p.targetPrice!.toStringAsFixed(1)}',
+                        style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                      ),
+                    if (p.strategy.isNotEmpty)
+                      Text('Strategy: ${p.strategy}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ],
+            if (p.models.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: p.models.map((m) => Chip(label: Text(m, style: const TextStyle(fontSize: 10)))).toList(),
+              ),
+            ],
             const SizedBox(height: 6),
             Text(p.optionHint, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
             Text(p.prediction, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 
-LOT_SIZES = {"NIFTY": 25, "BANKNIFTY": 15, "SENSEX": 10}
+from app.core.index_config import LOT_SIZES
 
 
 class _JournalLike(Protocol):
