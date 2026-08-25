@@ -45,7 +45,14 @@ void main() {
               ),
             ],
             headlines: [
-              NewsHeadline(source: 'Moneycontrol', title: 'Markets rise on strong inflows', sentiment: 'bullish'),
+              NewsHeadline(
+                source: 'Moneycontrol',
+                title: 'Markets rise on strong inflows',
+                sentiment: 'bullish',
+                symbols: ['NIFTY'],
+                marketsAffected: ['Nifty 50'],
+                publishedAt: '2026-08-25T03:30:00Z',
+              ),
             ],
             disclaimer: 'Test',
           ),
@@ -60,11 +67,13 @@ void main() {
 
     expect(find.text('Live news'), findsOneWidget);
     expect(find.text('Markets rise on strong inflows'), findsOneWidget);
+    expect(find.textContaining('May affect'), findsOneWidget);
+    expect(find.text('Tap to read full story'), findsOneWidget);
 
     await tester.tap(find.text('GIFT Nifty & trade analysis'));
     await tester.pumpAndSettle();
 
-    expect(find.text('NIFTY'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('+100 pts'), 200);
     expect(find.text('+100 pts'), findsOneWidget);
   });
 }

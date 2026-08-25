@@ -64,6 +64,52 @@ class SignalModel {
     return 'BUY $instrument $optionLabel × $positionSize lots';
   }
 
+  /// LONG for bullish, SHORT for bearish (underlying bias).
+  String get directionLabel {
+    if (direction == 'bullish') return 'LONG';
+    if (direction == 'bearish') return 'SHORT';
+    return 'NEUTRAL';
+  }
+
+  /// Option action text shown on cards.
+  String get actionLabel {
+    if (optionLabel.isEmpty) return directionLabel == 'NEUTRAL' ? '' : directionLabel;
+    return 'BUY $instrument $optionLabel';
+  }
+
+  /// Expected underlying move % to first target.
+  double? get targetMovePercent {
+    if (underlyingTarget.isEmpty || underlyingEntry <= 0) return null;
+    final target = underlyingTarget.first;
+    if (direction == 'bearish') {
+      return ((underlyingEntry - target) / underlyingEntry) * 100;
+    }
+    return ((target - underlyingEntry) / underlyingEntry) * 100;
+  }
+
+  /// Historical setup win rate from backtest (0–100).
+  double? get winRatePercent {
+    final wr = backtestStats['win_rate'];
+    if (wr is! num) return null;
+    return wr <= 1 ? wr * 100 : wr.toDouble();
+  }
+
+  String get profitSummary {
+    final parts = <String>[];
+    final move = targetMovePercent;
+    if (move != null && move > 0) {
+      parts.add('${move >= 0 ? '+' : ''}${move.toStringAsFixed(2)}% target');
+    }
+    final wr = winRatePercent;
+    if (wr != null && wr > 0) {
+      parts.add('${wr.toStringAsFixed(0)}% win rate');
+    }
+    if (riskReward > 0) {
+      parts.add('R:R ${riskReward.toStringAsFixed(1)}');
+    }
+    return parts.join(' · ');
+  }
+
   String get expiryLabel {
     if (suggestedExpiry.isEmpty) return '';
     if (daysToExpiry > 0) return '$suggestedExpiry ($daysToExpiry DTE)';

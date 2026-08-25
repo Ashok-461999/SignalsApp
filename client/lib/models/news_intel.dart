@@ -1,3 +1,5 @@
+import 'package:intl/intl.dart';
+
 import 'market_session.dart';
 
 class NewsHeadline {
@@ -7,7 +9,9 @@ class NewsHeadline {
     this.sentiment = 'neutral',
     this.score = 50,
     this.symbols = const [],
+    this.marketsAffected = const [],
     this.prediction = '',
+    this.summary = '',
     this.category = 'indian',
     this.publishedAt = '',
     this.url = '',
@@ -18,7 +22,9 @@ class NewsHeadline {
   final String sentiment;
   final int score;
   final List<String> symbols;
+  final List<String> marketsAffected;
   final String prediction;
+  final String summary;
   final String category;
   final String publishedAt;
   final String url;
@@ -26,13 +32,49 @@ class NewsHeadline {
   bool get isGlobal => category == 'global';
   bool get isIndian => category != 'global';
 
+  DateTime? get publishedDateTime {
+    if (publishedAt.isEmpty) return null;
+    try {
+      return DateTime.parse(publishedAt).toLocal();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String get timeLabel {
+    final dt = publishedDateTime;
+    if (dt == null) return publishedAt.isNotEmpty ? publishedAt : '';
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return DateFormat('h:mm a').format(dt);
+    if (diff.inDays < 7) return DateFormat('EEE h:mm a').format(dt);
+    return DateFormat('d MMM, h:mm a').format(dt);
+  }
+
+  String get fullTimeLabel {
+    final dt = publishedDateTime;
+    if (dt == null) return publishedAt;
+    return DateFormat('EEE, d MMM yyyy · h:mm a').format(dt);
+  }
+
+  List<String> get affectedMarkets =>
+      marketsAffected.isNotEmpty ? marketsAffected : symbols;
+
+  String get marketsLabel =>
+      affectedMarkets.isEmpty ? 'Broad market' : affectedMarkets.join(', ');
+
   factory NewsHeadline.fromJson(Map<String, dynamic> json) => NewsHeadline(
         source: json['source'] as String? ?? '',
         title: json['title'] as String? ?? '',
         sentiment: json['sentiment'] as String? ?? 'neutral',
         score: (json['score'] as num?)?.toInt() ?? 50,
         symbols: (json['symbols'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
+        marketsAffected:
+            (json['markets_affected'] as List<dynamic>? ?? []).map((e) => e.toString()).toList(),
         prediction: json['prediction'] as String? ?? '',
+        summary: json['summary'] as String? ?? '',
         category: json['category'] as String? ?? 'indian',
         publishedAt: json['published_at'] as String? ?? '',
         url: json['url'] as String? ?? '',

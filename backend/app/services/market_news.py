@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -44,6 +46,33 @@ def _text(el: ET.Element | None) -> str:
     return el.text.strip()
 
 
+def _strip_html(text: str) -> str:
+    clean = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", clean).strip()
+
+
+def _normalize_pub_date(raw: str) -> str:
+    if not raw:
+        return ""
+    try:
+        dt = parsedate_to_datetime(raw)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError):
+        return raw
+
+
+def _item_summary(item: ET.Element) -> str:
+    for tag in ("description", "{http://purl.org/rss/1.0/modules/content/}encoded"):
+        raw = _text(item.find(tag))
+        if raw:
+            summary = _strip_html(raw)
+            if len(summary) >= 20:
+                return summary[:500]
+    return ""
+
+
 def _parse_rss(xml_text: str, feed: NewsFeed) -> list[dict]:
     headlines: list[dict] = []
     try:
@@ -57,13 +86,15 @@ def _parse_rss(xml_text: str, feed: NewsFeed) -> list[dict]:
             continue
         pub = _text(item.find("pubDate")) or _text(item.find("{http://purl.org/dc/elements/1.1/}date"))
         link = _text(item.find("link"))
+        summary = _item_summary(item)
         headlines.append(
             {
                 "source": feed.source,
                 "title": title,
                 "category": feed.category,
-                "published_at": pub,
+                "published_at": _normalize_pub_date(pub),
                 "url": link,
+                "summary": summary,
             }
         )
         if len(headlines) >= feed.per_fetch:

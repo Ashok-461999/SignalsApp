@@ -7,6 +7,7 @@ import '../providers/app_providers.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_background.dart';
 import '../widgets/status_widgets.dart';
+import 'news_detail_screen.dart';
 
 enum _NewsFilter { all, india, global }
 
@@ -284,62 +285,86 @@ class _NewsFeedCard extends StatelessWidget {
     };
     final regionColor = h.isGlobal ? AppColors.warn : AppColors.accent;
 
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.surface.withValues(alpha: 0.96),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border.withValues(alpha: 0.65)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => NewsDetailScreen(headline: h)),
+        ),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: 0.96),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.65)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _tag(h.isGlobal ? 'GLOBAL' : 'INDIA', regionColor),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  h.source,
-                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                  maxLines: 1,
+              Row(
+                children: [
+                  _tag(h.isGlobal ? 'GLOBAL' : 'INDIA', regionColor),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      h.source,
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (h.timeLabel.isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(h.timeLabel, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                  ],
+                  const SizedBox(width: 6),
+                  _tag(h.sentiment.toUpperCase(), accent),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                h.title,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, height: 1.35),
+              ),
+              if (h.affectedMarkets.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.show_chart_rounded, size: 13, color: AppColors.accent),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'May affect: ${h.marketsLabel}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.accent, fontWeight: FontWeight.w600),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              if (h.prediction.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  h.prediction,
+                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35),
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
+              ],
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Text('Tap to read full story', style: TextStyle(fontSize: 11, color: AppColors.accent)),
+                  const Spacer(),
+                  const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: AppColors.textMuted),
+                ],
               ),
-              const SizedBox(width: 6),
-              _tag(h.sentiment.toUpperCase(), accent),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            h.title,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, height: 1.35),
-          ),
-          if (h.prediction.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              h.prediction,
-              style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.35),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-          if (h.symbols.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: h.symbols
-                  .take(4)
-                  .map((s) => Chip(
-                        label: Text(s, style: const TextStyle(fontSize: 10)),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ))
-                  .toList(),
-            ),
-          ],
-        ],
+        ),
       ),
     );
   }

@@ -10,11 +10,27 @@ import '../widgets/app_background.dart';
 import '../widgets/status_widgets.dart';
 import 'setup_detail_screen.dart';
 
-class SignalsScreen extends ConsumerWidget {
+class SignalsScreen extends ConsumerStatefulWidget {
   const SignalsScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SignalsScreen> createState() => _SignalsScreenState();
+}
+
+enum _SignalFilter { all, take, noTrade, sitOut }
+
+class _SignalsScreenState extends ConsumerState<SignalsScreen> {
+  _SignalFilter _filter = _SignalFilter.all;
+
+  List<SignalModel> _applyFilter(List<SignalModel> list) => switch (_filter) {
+        _SignalFilter.take => list.where((s) => s.tradeDecision == 'TAKE').toList(),
+        _SignalFilter.noTrade => list.where((s) => s.tradeDecision == 'NO_TRADE').toList(),
+        _SignalFilter.sitOut => list.where((s) => s.tradeDecision == 'SIT_OUT').toList(),
+        _ => list,
+      };
+
+  @override
+  Widget build(BuildContext context) {
     final health = ref.watch(healthProvider);
     final signals = ref.watch(activeSignalsProvider);
     final regimes = ref.watch(regimesProvider);
@@ -80,7 +96,7 @@ class SignalsScreen extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Row(
               children: [
-                const Text('Options signals', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
+                const Text('Trade signals', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800)),
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
@@ -91,6 +107,43 @@ class SignalsScreen extends ConsumerWidget {
                   onPressed: () => _showGuide(context),
                 ),
               ],
+            ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _DecisionFilterChip(
+                    label: 'All',
+                    selected: _filter == _SignalFilter.all,
+                    onTap: () => setState(() => _filter = _SignalFilter.all),
+                  ),
+                  const SizedBox(width: 8),
+                  _DecisionFilterChip(
+                    label: 'TAKE',
+                    color: AppColors.profit,
+                    selected: _filter == _SignalFilter.take,
+                    onTap: () => setState(() => _filter = _SignalFilter.take),
+                  ),
+                  const SizedBox(width: 8),
+                  _DecisionFilterChip(
+                    label: 'NO_TRADE',
+                    color: AppColors.warn,
+                    selected: _filter == _SignalFilter.noTrade,
+                    onTap: () => setState(() => _filter = _SignalFilter.noTrade),
+                  ),
+                  const SizedBox(width: 8),
+                  _DecisionFilterChip(
+                    label: 'SIT_OUT',
+                    selected: _filter == _SignalFilter.sitOut,
+                    onTap: () => setState(() => _filter = _SignalFilter.sitOut),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -110,10 +163,32 @@ class SignalsScreen extends ConsumerWidget {
             }
 
             final takeCount = list.where((s) => s.tradeDecision == 'TAKE').length;
-            final sorted = [...list]..sort((a, b) {
+            final filtered = _applyFilter(list);
+            final sorted = [...filtered]..sort((a, b) {
                 const order = {'TAKE': 0, 'NO_TRADE': 1, 'SIT_OUT': 2};
                 return (order[a.tradeDecision] ?? 9).compareTo(order[b.tradeDecision] ?? 9);
               });
+
+            if (filtered.isEmpty) {
+              final filterLabel = switch (_filter) {
+                _SignalFilter.take => 'TAKE',
+                _SignalFilter.noTrade => 'NO_TRADE',
+                _SignalFilter.sitOut => 'SIT_OUT',
+                _ => 'matching',
+              };
+              return SliverFillRemaining(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No $filterLabel signals — try another filter',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.textMuted),
+                    ),
+                  ),
+                ),
+              );
+            }
 
             return SliverList(
               delegate: SliverChildListDelegate([
@@ -210,6 +285,38 @@ class _GiftNiftyBanner extends StatelessWidget {
   }
 }
 
+class _DecisionFilterChip extends StatelessWidget {
+  const _DecisionFilterChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.color,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = color ?? AppColors.accent;
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      showCheckmark: false,
+      labelStyle: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w700,
+        color: selected ? accent : AppColors.textMuted,
+      ),
+      selectedColor: accent.withValues(alpha: 0.18),
+      backgroundColor: AppColors.surfaceHigh.withValues(alpha: 0.5),
+      side: BorderSide(color: selected ? accent.withValues(alpha: 0.5) : AppColors.border),
+    );
+  }
+}
+
 class _GuideRow extends StatelessWidget {
   const _GuideRow({required this.icon, required this.color, required this.text});
   final IconData icon;
@@ -263,7 +370,7 @@ class _HeroBanner extends StatelessWidget {
                   active ? '$takeCount tradeable setup(s)' : 'No TAKE signals',
                   style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                 ),
-                Text('$total evaluations · options strike & expiry on each card', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                Text('$total evaluations · BUY = option to buy · LONG/SHORT = bias', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
           ),
@@ -282,6 +389,13 @@ class _SignalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final d = signal.tradeDecision;
     final accent = decisionAccent(d);
+    final isTake = d == 'TAKE';
+    final dir = signal.directionLabel;
+    final dirColor = dir == 'LONG'
+        ? AppColors.profit
+        : dir == 'SHORT'
+            ? AppColors.loss
+            : AppColors.textMuted;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -297,33 +411,27 @@ class _SignalCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: accent.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(d, style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 12)),
-                ),
-                if (signal.freshnessLabel != null) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      signal.freshnessLabel!,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: signal.isStale ? AppColors.warn : AppColors.textMuted,
-                        fontWeight: signal.isStale ? FontWeight.w700 : FontWeight.normal,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
+                _badge(d, accent),
+                if (dir != 'NEUTRAL') ...[
+                  const SizedBox(width: 6),
+                  _badge(dir, dirColor),
                 ],
+                const Spacer(),
                 if (signal.regime.isNotEmpty)
                   Text(signal.regime, style: const TextStyle(color: AppColors.textMuted, fontSize: 11)),
               ],
             ),
+            if (signal.freshnessLabel != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                signal.freshnessLabel!,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: signal.isStale ? AppColors.warn : AppColors.textMuted,
+                  fontWeight: signal.isStale ? FontWeight.w700 : FontWeight.normal,
+                ),
+              ),
+            ],
             const SizedBox(height: 10),
             Text(
               signal.setupName == 'regime_advisory'
@@ -331,7 +439,7 @@ class _SignalCard extends StatelessWidget {
                   : '${signal.setupName} · ${signal.instrument}',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
-            if (signal.optionLabel.isNotEmpty) ...[
+            if (signal.actionLabel.isNotEmpty) ...[
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -339,15 +447,30 @@ class _SignalCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppColors.bg.withValues(alpha: 0.45),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: accent.withValues(alpha: 0.25)),
+                  border: Border.all(color: (isTake ? accent : AppColors.border).withValues(alpha: 0.35)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      signal.tradeDecision == 'TAKE' ? 'BUY ${signal.instrument} ${signal.optionLabel}' : signal.optionLabel,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: accent),
+                      signal.actionLabel,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: isTake ? accent : AppColors.textMuted,
+                      ),
                     ),
+                    if (signal.profitSummary.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        signal.profitSummary,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isTake ? AppColors.profit : AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                     if (signal.suggestedExpiry.isNotEmpty)
                       Text(
                         signal.expiryLabel.isNotEmpty ? 'Expiry ${signal.expiryLabel}' : 'Expiry ${signal.suggestedExpiry}',
@@ -365,7 +488,7 @@ class _SignalCard extends StatelessWidget {
                       Text(signal.ivWarning!, style: const TextStyle(fontSize: 11, color: AppColors.warn)),
                     if (signal.dteWarning != null)
                       Text(signal.dteWarning!, style: const TextStyle(fontSize: 11, color: AppColors.warn)),
-                    if (signal.tradeDecision == 'TAKE' && signal.brokerOrderHint.isNotEmpty) ...[
+                    if (isTake && signal.brokerOrderHint.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
                         onPressed: () {
@@ -382,19 +505,9 @@ class _SignalCard extends StatelessWidget {
                 ),
               ),
             ],
-            if (signal.direction != 'neutral' && signal.tradeDecision != 'SIT_OUT')
-              Text(
-                '${signal.direction.toUpperCase()} · R:R ${signal.riskReward.toStringAsFixed(1)}',
-                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
-              ),
             if (signal.decisionReason.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(
-                signal.decisionReason,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 13),
-              ),
+              Text(signal.decisionReason, style: const TextStyle(fontSize: 13, height: 1.35)),
             ],
             if (newsOutlook != null) ...[
               const SizedBox(height: 8),
@@ -448,6 +561,10 @@ class _SignalCard extends StatelessWidget {
                 _pill('E ${signal.underlyingEntry.toStringAsFixed(0)}'),
                 const SizedBox(width: 6),
                 _pill('SL ${signal.underlyingStopLoss.toStringAsFixed(0)}', color: AppColors.loss),
+                if (signal.underlyingTarget.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  _pill('T ${signal.underlyingTarget.first.toStringAsFixed(0)}', color: AppColors.profit),
+                ],
                 const Spacer(),
                 const Icon(Icons.arrow_forward_rounded, size: 18, color: AppColors.textMuted),
               ],
@@ -457,6 +574,16 @@ class _SignalCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _badge(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.35)),
+        ),
+        child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.w800, fontSize: 12)),
+      );
 
   Widget _pill(String text, {Color? color}) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

@@ -48,6 +48,14 @@ def _match_symbols(text: str) -> list[str]:
     return matched or []
 
 
+def _markets_affected(symbols: list[str]) -> list[str]:
+    names: list[str] = []
+    for symbol in symbols:
+        profile = SYMBOL_PROFILES.get(symbol, {})
+        names.append(profile.get("name", symbol))
+    return names
+
+
 def analyze_headline(title: str) -> dict:
     lower = title.lower()
     bull = sum(1 for w in BULLISH_WORDS if w in lower)
@@ -71,6 +79,7 @@ def analyze_headline(title: str) -> dict:
         "sentiment": sentiment,
         "score": score,
         "symbols": symbols,
+        "markets_affected": _markets_affected(symbols),
         "prediction": prediction,
     }
 
