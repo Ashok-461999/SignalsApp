@@ -53,6 +53,10 @@ class SignalModel {
   final double backtestExpectancy;
   final double backtestMaxDrawdown;
   final int backtestTradeCount;
+  final double premiumEntry;
+  final double premiumTarget;
+  final double premiumStop;
+  final String optionTradePlan;
 
   SignalModel({
     required this.setupName,
@@ -109,6 +113,10 @@ class SignalModel {
     this.backtestExpectancy = 0,
     this.backtestMaxDrawdown = 0,
     this.backtestTradeCount = 0,
+    this.premiumEntry = 0,
+    this.premiumTarget = 0,
+    this.premiumStop = 0,
+    this.optionTradePlan = '',
   });
 
   bool get backtestOk => backtestVerdict == 'PROFITABLE';
@@ -307,6 +315,10 @@ class SignalModel {
         backtestExpectancy: _dbl(json['backtest_expectancy']),
         backtestMaxDrawdown: _dbl(json['backtest_max_drawdown']),
         backtestTradeCount: _int(json['backtest_trade_count']),
+        premiumEntry: _dbl(json['premium_entry'], _dbl(json['entry_premium_estimate'])),
+        premiumTarget: _dbl(json['premium_target']),
+        premiumStop: _dbl(json['premium_stop'], _dbl(json['premium_stop_reference'])),
+        optionTradePlan: json['option_trade_plan'] as String? ?? '',
       );
 
   static int _liveInt(Map<String, dynamic> json, String key) {

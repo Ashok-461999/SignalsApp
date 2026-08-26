@@ -66,13 +66,16 @@ def get_regimes() -> dict:
 
 @router.get("/history")
 def get_signal_history(
-    limit: int = Query(50, ge=1, le=500),
+    limit: int = Query(50, ge=1, le=200),
     session: Session = Depends(get_sync_session),
 ) -> dict:
-    """Recent fired signals from the log."""
+    """Recent TAKE signals from the log (fast — capped enrich)."""
     rows = (
         session.execute(
-            select(SignalLog).order_by(SignalLog.created_at.desc()).limit(limit)
+            select(SignalLog)
+            .where(SignalLog.tradable.is_(True))
+            .order_by(SignalLog.created_at.desc())
+            .limit(limit)
         )
         .scalars()
         .all()
@@ -81,7 +84,10 @@ def get_signal_history(
     for row in rows:
         try:
             payload = json.loads(row.payload)
-            signals.append(enrich_history_row(session, row, payload))
+            if payload.get("options_result"):
+                signals.append({**payload, "log_id": row.id, "logged_at": row.created_at.isoformat() if row.created_at else ""})
+            else:
+                signals.append(enrich_history_row(session, row, payload))
         except json.JSONDecodeError:
             continue
     session.commit()

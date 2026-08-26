@@ -605,7 +605,38 @@ class _SignalCard extends StatelessWidget {
                           color: signal.daysToExpiry >= 20 ? AppColors.textMuted : AppColors.warn,
                         ),
                       ),
-                    if (signal.entryPremiumEstimate > 0)
+                    if (isTake && signal.optionTradePlan.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.profit.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.profit.withValues(alpha: 0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'OPTION PRICES (scalp)',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.profit),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              signal.optionTradePlan,
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                            ),
+                            if (signal.premiumEntry > 0)
+                              Text(
+                                'Buy near ₹${signal.premiumEntry.toStringAsFixed(0)} → sell near ₹${signal.premiumTarget.toStringAsFixed(0)} · SL if below ₹${signal.premiumStop.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (signal.entryPremiumEstimate > 0 && signal.optionTradePlan.isEmpty)
                       Text(
                         'Est. premium ~₹${signal.entryPremiumEstimate.toStringAsFixed(0)} · ${signal.positionSize} lots',
                         style: const TextStyle(fontSize: 12, color: AppColors.textMuted),

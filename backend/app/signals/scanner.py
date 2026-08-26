@@ -2,10 +2,10 @@
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.backtest.options import (
     atm_strike,
@@ -45,6 +45,9 @@ class SignalScanner:
         self._active_signals: list[dict] = []
         self._last_regime: dict[str, dict] = {}
         self._last_scan: dict[str, str] = {}
+        self._last_take_at: dict[str, datetime] = {}
+        self._take_count_date: str = ""
+        self._take_count_today: int = 0
 
     def subscribe(self, callback) -> None:
         self._subscribers.append(callback)
@@ -57,7 +60,41 @@ class SignalScanner:
         ]
 
     def get_all_evaluations(self) -> list[dict]:
-        return list(self._active_signals)
+        """Live TAKE signals only — no 70+ NO_TRADE spam."""
+        return self.get_active_signals()
+
+    def _ist_today(self) -> str:
+        ist = timezone(timedelta(hours=5, minutes=30))
+        return datetime.now(ist).strftime("%Y-%m-%d")
+
+    def _refresh_take_count(self, session) -> int:
+        today = self._ist_today()
+        if today != self._take_count_date:
+            self._take_count_date = today
+            ist = timezone(timedelta(hours=5, minutes=30))
+            start = datetime.now(ist).replace(hour=0, minute=0, second=0, microsecond=0)
+            start_utc = start.astimezone(timezone.utc)
+            count = session.scalar(
+                select(func.count(SignalLog.id)).where(
+                    SignalLog.tradable.is_(True),
+                    SignalLog.created_at >= start_utc,
+                )
+            )
+            self._take_count_today = int(count or 0)
+        return self._take_count_today
+
+    def _in_cooldown(self, setup_name: str, instrument: str) -> bool:
+        settings = get_settings()
+        key = f"{setup_name}:{instrument}"
+        last = self._last_take_at.get(key)
+        if not last:
+            return False
+        gap = timedelta(minutes=max(5, int(settings.signal_cooldown_minutes)))
+        return datetime.now(timezone.utc) - last < gap
+
+    def _mark_take(self, setup_name: str, instrument: str) -> None:
+        self._last_take_at[f"{setup_name}:{instrument}"] = datetime.now(timezone.utc)
+        self._take_count_today += 1
 
     def get_regime(self, instrument: str) -> dict | None:
         return self._last_regime.get(instrument)
@@ -80,8 +117,11 @@ class SignalScanner:
                 s for s in self._active_signals if s.get("instrument") != instrument
             ]
             for ev in evaluations:
+                if not ev.get("can_take"):
+                    continue
                 self._active_signals.append(ev)
-                self._persist_signal(session, ev)
+                if self._should_persist(session, ev):
+                    self._persist_signal(session, ev)
                 for cb in self._subscribers:
                     try:
                         cb(ev)
@@ -280,6 +320,38 @@ class SignalScanner:
                     "prediction": "Skip — capital too small for this trade",
                 }
 
+            take_today = self._refresh_take_count(session)
+            if decision.get("can_take") and take_today >= settings.max_take_signals_per_day:
+                decision = {
+                    **decision,
+                    "can_take": False,
+                    "trade_decision": "NO_TRADE",
+                    "decision_reason": (
+                        f"Daily scalp limit ({settings.max_take_signals_per_day} TAKE) reached — "
+                        "wait for tomorrow or next session"
+                    ),
+                    "prediction": "Skip — daily signal cap",
+                }
+            elif decision.get("can_take") and self._in_cooldown(setup_name, instrument):
+                decision = {
+                    **decision,
+                    "can_take": False,
+                    "trade_decision": "NO_TRADE",
+                    "decision_reason": (
+                        f"Same setup on {instrument} fired recently — "
+                        f"wait {settings.signal_cooldown_minutes} min (scalp cooldown)"
+                    ),
+                    "prediction": "Skip — cooldown",
+                }
+
+            target_px = float(result.targets[0]) if result.targets else entry
+            opt_bs = "call" if direction == "bullish" else "put"
+            prem_target = (
+                black_scholes_price(target_px, strike, float(days_to_exp), iv, opt_bs)
+                if result.fired
+                else 0.0
+            )
+
             payload = SignalPayload(
                 setup_name=setup_name,
                 instrument=instrument,
@@ -355,6 +427,20 @@ class SignalScanner:
             sig["backtest_expectancy"] = bt_info.get("backtest_expectancy", 0)
             sig["backtest_max_drawdown"] = bt_info.get("backtest_max_drawdown", 0)
             sig["backtest_trade_count"] = bt_info.get("backtest_trade_count", 0)
+            sig["premium_entry"] = round(entry_prem, 2) if result.fired else 0
+            sig["premium_target"] = round(prem_target, 2) if result.fired else 0
+            sig["premium_stop"] = round(prem_stop, 2) if result.fired else 0
+            if result.fired and entry_prem > 0:
+                sig["option_trade_plan"] = (
+                    f"Buy ~₹{entry_prem:.0f} · Target ₹{prem_target:.0f} · SL below ₹{prem_stop:.0f}"
+                )
+                sig["option_trade_plan_en"] = (
+                    f"Enter premium ~{entry_prem:.0f}, book profit near {prem_target:.0f}, "
+                    f"exit if premium drops below {prem_stop:.0f}"
+                )
+            else:
+                sig["option_trade_plan"] = ""
+                sig["option_trade_plan_en"] = ""
 
             if news_line and decision.get("can_take"):
                 sig["decision_reason"] = f"{decision['decision_reason']} | {news_line}"
@@ -381,8 +467,16 @@ class SignalScanner:
 
         return evaluations
 
+    def _should_persist(self, session, sig: dict) -> bool:
+        settings = get_settings()
+        if settings.persist_take_signals_only and not sig.get("can_take"):
+            return False
+        return True
+
     def _persist_signal(self, session, sig: dict) -> None:
         settings = get_settings()
+        if sig.get("can_take"):
+            self._mark_take(sig.get("setup_name", ""), sig["instrument"])
         row = SignalLog(
             setup_name=sig.get("setup_name", "unknown"),
             instrument=sig["instrument"],
