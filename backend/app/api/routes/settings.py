@@ -18,7 +18,9 @@ class TradingSettingsBody(BaseModel):
     crypto_paper_trading: bool | None = None
     crypto_live_enabled: bool | None = None
     kill_switch: bool | None = None
-    risk_percent: float | None = Field(default=None, ge=0.1, le=5.0)
+    risk_percent: float | None = Field(default=None, ge=0.1, le=3.0)
+    trading_capital_inr: float | None = Field(default=None, ge=5000, le=5000000)
+    trading_style: str | None = Field(default=None, pattern="^(scalp|swing|hybrid)$")
 
 
 @router.get("/trading")

@@ -18,16 +18,20 @@ from app.backtest.options import (
 )
 from app.config import get_settings
 from app.core.index_config import INDEX_SYMBOLS, LOT_SIZES
-from app.data.models import Candle, SignalLog
+from app.data.models import Candle, SignalLog, SignalPrediction
 from app.db.session import SyncSessionLocal
 from app.signals.iv import DEFAULT_IV, compute_iv_percentile
 from app.signals.regime import SETUP_DESCRIPTIONS, detect_regime
 from app.signals.registry import get_stats, is_tradable
 from app.signals.schemas import SignalPayload
 from app.signals.setups import SETUP_FUNCTIONS
+from app.signals.backtest_verdict import interpret_backtest, rolling_backtest_stats
 from app.signals.trade_decision import evaluate_trade_decision
 from app.services.market_news import get_enriched_headlines
 from app.services.market_predictions import news_bias_for_instrument
+from app.services.trading_settings import load_trading_settings
+from app.services.signal_performance import load_live_setup_stats
+from app.signals.position_sizing import plan_futures_position, plan_option_position
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +50,11 @@ class SignalScanner:
         self._subscribers.append(callback)
 
     def get_active_signals(self) -> list[dict]:
-        """Only TAKE signals — ready to trade in your other app."""
-        return [s for s in self._active_signals if s.get("trade_decision") == "TAKE"]
+        """Only scalp-approved TAKE signals — ready to trade."""
+        return [
+            s for s in self._active_signals
+            if s.get("can_take") or s.get("trade_decision") == "TAKE"
+        ]
 
     def get_all_evaluations(self) -> list[dict]:
         return list(self._active_signals)
@@ -121,6 +128,12 @@ class SignalScanner:
             return []
 
         settings = get_settings()
+        trading = load_trading_settings(session)
+        capital_inr = trading.trading_capital_inr or settings.trading_capital_inr
+        risk_pct = trading.risk_percent or settings.risk_percent
+        trade_style = (trading.trading_style or settings.trading_style or "hybrid").lower()
+        live_setup_stats = load_live_setup_stats(session)
+
         iv_data = compute_iv_percentile(session, instrument, segment, SCAN_INTERVAL)
         iv_pct = iv_data["iv_percentile"]
         iv = iv_data.get("current_iv_proxy", DEFAULT_IV)
@@ -181,15 +194,32 @@ class SignalScanner:
 
         for setup_name, fn in SETUP_FUNCTIONS.items():
             result = fn(df)
-            decision = evaluate_trade_decision(setup_name, result, regime_snap, iv_pct)
+            stats = get_stats(setup_name, instrument, segment)
+            if int(stats.get("trade_count") or 0) < 5:
+                stats = rolling_backtest_stats(df, setup_name, instrument, segment)
+            bt_info = interpret_backtest(stats)
+            decision = evaluate_trade_decision(
+                setup_name,
+                result,
+                regime_snap,
+                iv_pct,
+                backtest_stats=stats,
+                trading_style=trade_style,
+                live_setup_stats=live_setup_stats,
+            )
 
             if not result.fired and decision["trade_decision"] == "NO_TRADE":
                 continue  # skip silent non-triggers
 
-            stats = get_stats(setup_name, instrument, segment)
             tradable = is_tradable(setup_name, instrument, segment)
             if settings.require_backtest_for_signals and not tradable:
                 continue
+
+            min_dte = (
+                settings.min_option_dte_scalp
+                if trade_style == "scalp"
+                else settings.min_option_dte
+            )
 
             direction = result.direction or regime_snap.trend_direction
             if direction == "neutral":
@@ -200,7 +230,7 @@ class SignalScanner:
             stop = result.stop_loss or entry
             strike = atm_strike(entry, step)
             expiry = nearest_expiry_min_days(
-                min_days=settings.min_option_dte,
+                min_days=min_dte,
                 expiry_weekday=expiry_weekday_for(instrument),
             )
             lot = LOT_SIZES.get(instrument, 25)
@@ -210,10 +240,6 @@ class SignalScanner:
                 continue
 
             size_mod = decision.get("size_modifier", 1.0)
-            capital_risk = settings.risk_percent / 100.0
-            max_loss_per_lot = max(risk * 0.5, 1)
-            size = max(1, int((capital_risk * 100000) / (max_loss_per_lot * lot)))
-            size = max(1, int(size * size_mod))
 
             days_to_exp = days_until_expiry(expiry)
             prem_stop = premium_at_underlying_stop(entry, strike, stop, days_to_exp, iv, direction)
@@ -225,6 +251,34 @@ class SignalScanner:
                 iv,
                 "call" if direction == "bullish" else "put",
             )
+
+            pos = plan_option_position(
+                instrument,
+                entry_prem,
+                prem_stop,
+                capital_inr,
+                risk_pct,
+                size_mod,
+            )
+            fut_pos = plan_futures_position(
+                instrument,
+                entry,
+                stop,
+                capital_inr,
+                risk_pct,
+                size_mod,
+            )
+            size = pos.lots
+            futures_action = "BUY" if direction == "bullish" else "SELL"
+
+            if decision.get("can_take") and not pos.can_afford:
+                decision = {
+                    **decision,
+                    "can_take": False,
+                    "trade_decision": "NO_TRADE",
+                    "decision_reason": pos.reason,
+                    "prediction": "Skip — capital too small for this trade",
+                }
 
             payload = SignalPayload(
                 setup_name=setup_name,
@@ -238,11 +292,11 @@ class SignalScanner:
                 suggested_expiry=expiry.isoformat(),
                 iv_percentile=iv_pct,
                 risk_reward=result.risk_reward or 0,
-                position_size=size if decision["trade_decision"] == "TAKE" else 0,
+                position_size=size if decision.get("can_take") else 0,
                 premium_stop_reference=round(prem_stop, 2),
                 backtest_stats=stats,
                 timestamp=datetime.now(timezone.utc).isoformat(),
-                tradable=decision["trade_decision"] == "TAKE",
+                tradable=bool(decision.get("can_take")),
                 trade_decision=decision["trade_decision"],
                 decision_reason=decision["decision_reason"],
                 regime=decision["regime"],
@@ -250,18 +304,64 @@ class SignalScanner:
                 option_type=opt_type if result.fired else "",
                 entry_premium_estimate=round(entry_prem, 2) if result.fired else 0,
                 days_to_expiry=days_to_exp,
+                can_take=bool(decision.get("can_take")),
+                take_confidence=int(decision.get("take_confidence") or 0),
+                trading_style=decision.get("trading_style", trade_style),
+                prediction=decision.get("prediction", ""),
             )
             sig = payload.to_dict()
+            sig["capital_inr"] = capital_inr
+            sig["max_loss_inr"] = pos.max_loss_inr
+            sig["premium_required_inr"] = pos.premium_required_inr if pos.can_afford else round(entry_prem * lot, 2)
+            sig["hold_hint"] = (
+                "Scalp at T1 or hold 2–4 weeks to T2"
+                if trade_style == "hybrid"
+                else "Quick scalp exit" if trade_style == "scalp"
+                else "Hold weeks — 20+ DTE"
+            )
+            sig["primary_leg"] = "options"
+            sig["dual_leg_note"] = (
+                "Options first (higher profit potential). "
+                "Futures backup if option SL hits but index keeps moving."
+            )
+            sig["futures_action"] = futures_action if result.fired else ""
+            sig["futures_lots"] = fut_pos.lots if decision.get("can_take") else 0
+            sig["futures_max_loss_inr"] = fut_pos.max_loss_inr
+            sig["futures_margin_inr"] = fut_pos.margin_required_inr or fut_pos.margin_per_lot_inr
+            sig["futures_margin_per_lot_inr"] = fut_pos.margin_per_lot_inr
+            sig["futures_can_take"] = bool(decision.get("can_take") and fut_pos.can_afford)
+            sig["futures_reason"] = fut_pos.reason
+            sig["futures_broker_hint"] = (
+                f"{futures_action} {instrument} FUT × {fut_pos.lots} lots"
+                if decision.get("can_take") and fut_pos.lots > 0
+                else ""
+            )
             sig["setup_description"] = SETUP_DESCRIPTIONS.get(setup_name, "")
             sig["adx"] = regime_snap.adx
             sig["atr_percentile"] = regime_snap.atr_percentile
+            setup_live = live_setup_stats.get(setup_name) or {}
+            sig["live_track_record"] = {
+                "trades": setup_live.get("trades", 0),
+                "wins": setup_live.get("wins", 0),
+                "losses": setup_live.get("losses", 0),
+                "win_rate": setup_live.get("win_rate", 0),
+                "max_drawdown_inr": setup_live.get("max_drawdown_inr", 0),
+            }
+            sig["backtest_profitable"] = bt_info.get("backtest_profitable", False)
+            sig["backtest_verdict"] = bt_info.get("backtest_verdict", "NO_DATA")
+            sig["backtest_summary"] = bt_info.get("backtest_summary", "")
+            sig["backtest_win_rate"] = bt_info.get("backtest_win_rate", 0)
+            sig["backtest_profit_factor"] = bt_info.get("backtest_profit_factor", 0)
+            sig["backtest_expectancy"] = bt_info.get("backtest_expectancy", 0)
+            sig["backtest_max_drawdown"] = bt_info.get("backtest_max_drawdown", 0)
+            sig["backtest_trade_count"] = bt_info.get("backtest_trade_count", 0)
 
-            if news_line and decision["trade_decision"] == "TAKE":
+            if news_line and decision.get("can_take"):
                 sig["decision_reason"] = f"{decision['decision_reason']} | {news_line}"
             elif news_line and result.fired:
                 sig["news_bias"] = news_line
 
-            if decision["trade_decision"] == "TAKE":
+            if decision.get("can_take"):
                 logger.info(
                     "TAKE %s %s %s — %s",
                     setup_name,
@@ -282,15 +382,28 @@ class SignalScanner:
         return evaluations
 
     def _persist_signal(self, session, sig: dict) -> None:
+        settings = get_settings()
         row = SignalLog(
             setup_name=sig.get("setup_name", "unknown"),
             instrument=sig["instrument"],
             segment=sig.get("segment", "spot"),
             direction=sig.get("direction", "neutral"),
             payload=json.dumps(sig),
-            tradable=sig.get("trade_decision") == "TAKE",
+            tradable=bool(sig.get("can_take") or sig.get("trade_decision") == "TAKE"),
         )
         session.add(row)
+        session.flush()
+        pred = SignalPrediction(
+            signal_log_id=row.id,
+            setup_name=sig.get("setup_name", "unknown"),
+            instrument=sig["instrument"],
+            trade_decision=sig.get("trade_decision", "NO_TRADE"),
+            can_take=bool(sig.get("can_take")),
+            take_confidence=float(sig.get("take_confidence") or 0),
+            prediction=sig.get("prediction", ""),
+            trading_style=sig.get("trading_style", settings.trading_style),
+        )
+        session.add(pred)
         session.commit()
 
 

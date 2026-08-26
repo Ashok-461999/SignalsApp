@@ -53,6 +53,10 @@ class SignalPayload:
     option_type: str = ""  # CE | PE
     entry_premium_estimate: float = 0.0
     days_to_expiry: int = 0
+    can_take: bool = False
+    take_confidence: int = 0
+    trading_style: str = "scalp"
+    prediction: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -79,4 +83,8 @@ class SignalPayload:
             "option_type": self.option_type,
             "entry_premium_estimate": self.entry_premium_estimate,
             "days_to_expiry": self.days_to_expiry,
+            "can_take": self.can_take,
+            "take_confidence": self.take_confidence,
+            "trading_style": self.trading_style,
+            "prediction": self.prediction,
         }

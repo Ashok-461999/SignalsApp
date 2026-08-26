@@ -94,6 +94,9 @@ const defaultTradingSettings = <String, dynamic>{
   'kill_switch': false,
   'paper_trading': true,
   'live_execution_enabled': false,
+  'risk_percent': 1.0,
+  'trading_capital_inr': 20000.0,
+  'trading_style': 'hybrid',
 };
 
 final healthProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getHealth());
@@ -120,6 +123,10 @@ final tradingSettingsProvider = FutureProvider<Map<String, dynamic>>((ref) async
 final setupsProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getSetups());
 
 final journalProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getJournal());
+
+final signalHistoryProvider = FutureProvider<SignalHistoryResponse>((ref) async {
+  return ref.watch(apiServiceProvider).getSignalHistory(limit: 80);
+});
 
 final signalWsProvider = Provider<SignalWebSocket>((ref) {
   final ws = SignalWebSocket();

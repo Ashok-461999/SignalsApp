@@ -18,6 +18,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   static const _storage = FlutterSecureStorage();
   final _riskCtrl = TextEditingController(text: '1.0');
+  final _capitalCtrl = TextEditingController(text: '20000');
+  String _tradingStyle = 'hybrid';
   final _smartApiKeyCtrl = TextEditingController();
   final _claudeKeyCtrl = TextEditingController();
   bool _testingClaude = false;
@@ -31,6 +33,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   @override
   void dispose() {
     _riskCtrl.dispose();
+    _capitalCtrl.dispose();
     _smartApiKeyCtrl.dispose();
     _claudeKeyCtrl.dispose();
     super.dispose();
@@ -78,8 +81,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
-  Future<void> _updateTradingSetting(String key, bool value, {bool confirmLive = false}) async {
-    if (confirmLive && value) {
+  Future<void> _updateTradingSettings(Map<String, dynamic> updates, {bool confirmLive = false}) async {
+    if (confirmLive && updates['live_execution_enabled'] == true) {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -97,7 +100,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       if (ok != true) return;
     }
     try {
-      await ref.read(apiServiceProvider).updateTradingSettings({key: value});
+      await ref.read(apiServiceProvider).updateTradingSettings(updates);
       ref.invalidate(tradingSettingsProvider);
       ref.invalidate(healthProvider);
       if (!mounted) return;
@@ -143,6 +146,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               data: (t) => t,
               orElse: () => defaultTradingSettings,
             );
+            if (tradingSettings.hasValue) {
+              _riskCtrl.text = (settings['risk_percent'] ?? 1.0).toString();
+              _capitalCtrl.text = (settings['trading_capital_inr'] ?? 20000).toString();
+              _tradingStyle = settings['trading_style'] as String? ?? 'hybrid';
+            }
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -156,21 +164,71 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   title: const Text('Kill switch'),
                   subtitle: const Text('Emergency stop — blocks all orders'),
                   value: settings['kill_switch'] as bool? ?? false,
-                  onChanged: (v) => _updateTradingSetting('kill_switch', v),
+                  onChanged: (v) => _updateTradingSettings({'kill_switch': v}),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Paper trading'),
                   subtitle: const Text('Simulate options orders (no real money)'),
                   value: settings['paper_trading'] as bool? ?? true,
-                  onChanged: (v) => _updateTradingSetting('paper_trading', v),
+                  onChanged: (v) => _updateTradingSettings({'paper_trading': v}),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Live trading'),
                   subtitle: const Text('Send real SmartAPI orders'),
                   value: settings['live_execution_enabled'] as bool? ?? false,
-                  onChanged: (v) => _updateTradingSetting('live_execution_enabled', v, confirmLive: true),
+                  onChanged: (v) => _updateTradingSettings({'live_execution_enabled': v}, confirmLive: true),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _capitalCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Trading capital (₹)',
+                    hintText: '20000',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: _tradingStyle,
+                  decoration: const InputDecoration(
+                    labelText: 'Trading style',
+                    helperText: 'Hybrid = scalp T1 or hold 2–4 weeks',
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'scalp', child: Text('Scalp — quick exits')),
+                    DropdownMenuItem(value: 'swing', child: Text('Swing — hold weeks')),
+                    DropdownMenuItem(value: 'hybrid', child: Text('Hybrid — scalp + swing')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) setState(() => _tradingStyle = v);
+                  },
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: () async {
+                    final capital = double.tryParse(_capitalCtrl.text.trim());
+                    final risk = double.tryParse(_riskCtrl.text.trim());
+                    if (capital == null || capital < 5000) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Capital must be at least ₹5,000')),
+                      );
+                      return;
+                    }
+                    if (risk == null || risk < 0.1 || risk > 3) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Risk must be 0.1%–3%')),
+                      );
+                      return;
+                    }
+                    await _updateTradingSettings({
+                      'trading_capital_inr': capital,
+                      'trading_style': _tradingStyle,
+                      'risk_percent': risk,
+                    });
+                  },
+                  child: const Text('Save capital & style'),
                 ),
               ],
             );

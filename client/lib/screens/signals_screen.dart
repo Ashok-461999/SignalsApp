@@ -19,8 +19,11 @@ class SignalsScreen extends ConsumerStatefulWidget {
 
 enum _SignalFilter { all, take, noTrade, sitOut }
 
+enum _SignalsViewTab { live, history }
+
 class _SignalsScreenState extends ConsumerState<SignalsScreen> {
   _SignalFilter _filter = _SignalFilter.all;
+  _SignalsViewTab _viewTab = _SignalsViewTab.live;
 
   List<SignalModel> _applyFilter(List<SignalModel> list) => switch (_filter) {
         _SignalFilter.take => list.where((s) => s.tradeDecision == 'TAKE').toList(),
@@ -33,6 +36,7 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
   Widget build(BuildContext context) {
     final health = ref.watch(healthProvider);
     final signals = ref.watch(activeSignalsProvider);
+    final history = ref.watch(signalHistoryProvider);
     final regimes = ref.watch(regimesProvider);
     final predictions = ref.watch(predictionBySymbolProvider);
     final intel = ref.watch(marketIntelProvider);
@@ -100,7 +104,10 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.refresh_rounded),
-                  onPressed: () => ref.invalidate(activeSignalsProvider),
+                  onPressed: () {
+                    ref.invalidate(activeSignalsProvider);
+                    ref.invalidate(signalHistoryProvider);
+                  },
                 ),
                 IconButton(
                   icon: const Icon(Icons.help_outline_rounded),
@@ -113,41 +120,86 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _DecisionFilterChip(
-                    label: 'All',
-                    selected: _filter == _SignalFilter.all,
-                    onTap: () => setState(() => _filter = _SignalFilter.all),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SegmentedButton<_SignalsViewTab>(
+                    segments: const [
+                      ButtonSegment(value: _SignalsViewTab.live, label: Text('Live')),
+                      ButtonSegment(value: _SignalsViewTab.history, label: Text('History')),
+                    ],
+                    selected: {_viewTab},
+                    onSelectionChanged: (s) => setState(() => _viewTab = s.first),
+                    style: ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                      textStyle: const WidgetStatePropertyAll(TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  _DecisionFilterChip(
-                    label: 'TAKE',
-                    color: AppColors.profit,
-                    selected: _filter == _SignalFilter.take,
-                    onTap: () => setState(() => _filter = _SignalFilter.take),
-                  ),
-                  const SizedBox(width: 8),
-                  _DecisionFilterChip(
-                    label: 'NO_TRADE',
-                    color: AppColors.warn,
-                    selected: _filter == _SignalFilter.noTrade,
-                    onTap: () => setState(() => _filter = _SignalFilter.noTrade),
-                  ),
-                  const SizedBox(width: 8),
-                  _DecisionFilterChip(
-                    label: 'SIT_OUT',
-                    selected: _filter == _SignalFilter.sitOut,
-                    onTap: () => setState(() => _filter = _SignalFilter.sitOut),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
-        signals.when(
+        if (_viewTab == _SignalsViewTab.live)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _DecisionFilterChip(
+                      label: 'All',
+                      selected: _filter == _SignalFilter.all,
+                      onTap: () => setState(() => _filter = _SignalFilter.all),
+                    ),
+                    const SizedBox(width: 8),
+                    _DecisionFilterChip(
+                      label: 'TAKE',
+                      color: AppColors.profit,
+                      selected: _filter == _SignalFilter.take,
+                      onTap: () => setState(() => _filter = _SignalFilter.take),
+                    ),
+                    const SizedBox(width: 8),
+                    _DecisionFilterChip(
+                      label: 'NO_TRADE',
+                      color: AppColors.warn,
+                      selected: _filter == _SignalFilter.noTrade,
+                      onTap: () => setState(() => _filter = _SignalFilter.noTrade),
+                    ),
+                    const SizedBox(width: 8),
+                    _DecisionFilterChip(
+                      label: 'SIT_OUT',
+                      selected: _filter == _SignalFilter.sitOut,
+                      onTap: () => setState(() => _filter = _SignalFilter.sitOut),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        if (_viewTab == _SignalsViewTab.history)
+          history.when(
+            data: (data) => SliverList(
+              delegate: SliverChildListDelegate([
+                _HistorySummaryBanner(summary: data.summary),
+                ...data.items.map((item) => _HistoryCard(item: item)),
+                const SizedBox(height: 88),
+              ]),
+            ),
+            loading: () => const SliverFillRemaining(
+              child: Center(child: CircularProgressIndicator(color: AppColors.accent)),
+            ),
+            error: (e, _) => SliverFillRemaining(
+              child: AppErrorView(
+                title: 'History unavailable',
+                message: AppErrorView.friendlyMessage(e),
+                onRetry: () => ref.invalidate(signalHistoryProvider),
+              ),
+            ),
+          )
+        else
+          signals.when(
           data: (list) {
             if (list.isEmpty) {
               return SliverFillRemaining(
@@ -237,8 +289,10 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
           children: [
             Text('How to read signals', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             SizedBox(height: 16),
-            _GuideRow(icon: Icons.check_circle_rounded, color: AppColors.profit, text: 'TAKE — buy the option shown (strike + CE/PE) in your broker'),
-            _GuideRow(icon: Icons.pause_circle_rounded, color: AppColors.warn, text: 'NO_TRADE — FVG/sweep fired but skip (bad regime or R:R)'),
+            _GuideRow(icon: Icons.science_rounded, color: AppColors.accent, text: 'Backtest banner — profitable setups only get CAN TAKE'),
+            _GuideRow(icon: Icons.check_circle_rounded, color: AppColors.profit, text: 'OPTIONS (primary) — buy strike + CE/PE for higher profit'),
+            _GuideRow(icon: Icons.show_chart_rounded, color: AppColors.accent, text: 'FUTURES (backup) — if option SL hits but index keeps moving'),
+            _GuideRow(icon: Icons.pause_circle_rounded, color: AppColors.warn, text: 'NO_TRADE — setup fired but skip (bad regime or R:R)'),
             _GuideRow(icon: Icons.nightlight_round, color: AppColors.textMuted, text: 'SIT_OUT — ranging day, avoid buying options'),
             SizedBox(height: 8),
             _GuideRow(icon: Icons.candlestick_chart_rounded, color: AppColors.accent, text: 'Setups: FVG retest & liquidity sweep (not EMA) + news on Intel tab'),
@@ -370,7 +424,7 @@ class _HeroBanner extends StatelessWidget {
                   active ? '$takeCount tradeable setup(s)' : 'No TAKE signals',
                   style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
                 ),
-                Text('$total evaluations · BUY = option to buy · LONG/SHORT = bias', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                Text('$total evaluations · OPTIONS primary · FUTURES backup', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ],
             ),
           ),
@@ -412,6 +466,20 @@ class _SignalCard extends StatelessWidget {
             Row(
               children: [
                 _badge(d, accent),
+                if (signal.canTake) ...[
+                  const SizedBox(width: 6),
+                  _badge('CAN TAKE ${signal.takeConfidence}%', AppColors.profit),
+                ] else if (signal.prediction.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      signal.prediction,
+                      style: const TextStyle(fontSize: 10, color: AppColors.warn),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
                 if (dir != 'NEUTRAL') ...[
                   const SizedBox(width: 6),
                   _badge(dir, dirColor),
@@ -429,6 +497,42 @@ class _SignalCard extends StatelessWidget {
                   fontSize: 10,
                   color: signal.isStale ? AppColors.warn : AppColors.textMuted,
                   fontWeight: signal.isStale ? FontWeight.w700 : FontWeight.normal,
+                ),
+              ),
+            ],
+            if (signal.backtestSummary.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: (signal.backtestOk ? AppColors.profit : signal.backtestFailed ? AppColors.loss : AppColors.warn)
+                      .withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: (signal.backtestOk ? AppColors.profit : signal.backtestFailed ? AppColors.loss : AppColors.warn)
+                        .withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      signal.backtestOk ? Icons.verified_rounded : Icons.warning_amber_rounded,
+                      size: 16,
+                      color: signal.backtestOk ? AppColors.profit : signal.backtestFailed ? AppColors.loss : AppColors.warn,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        signal.backtestSummary,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: signal.backtestOk ? AppColors.profit : signal.backtestFailed ? AppColors.loss : AppColors.warn,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -452,14 +556,36 @@ class _SignalCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      signal.actionLabel,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w800,
-                        color: isTake ? accent : AppColors.textMuted,
+                    if (isTake && signal.dualLegNote.isNotEmpty) ...[
+                      Text(
+                        signal.dualLegNote,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                       ),
-                    ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (isTake && signal.actionLabel.isNotEmpty) ...[
+                      const Text(
+                        'OPTIONS · PRIMARY',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.profit),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        signal.actionLabel,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: isTake ? accent : AppColors.textMuted,
+                        ),
+                      ),
+                    ] else
+                      Text(
+                        signal.actionLabel.isNotEmpty ? signal.actionLabel : signal.directionLabel,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: isTake ? accent : AppColors.textMuted,
+                        ),
+                      ),
                     if (signal.profitSummary.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
@@ -484,6 +610,51 @@ class _SignalCard extends StatelessWidget {
                         'Est. premium ~₹${signal.entryPremiumEstimate.toStringAsFixed(0)} · ${signal.positionSize} lots',
                         style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                       ),
+                    if (signal.maxLossInr > 0)
+                      Text(
+                        'Max loss ~₹${signal.maxLossInr.toStringAsFixed(0)}'
+                        '${signal.premiumRequiredInr > 0 ? ' · need ~₹${signal.premiumRequiredInr.toStringAsFixed(0)}' : ''}'
+                        '${signal.capitalInr > 0 ? ' (₹${signal.capitalInr.toStringAsFixed(0)} capital)' : ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: signal.canTake ? AppColors.profit : AppColors.warn,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    if (signal.holdHint.isNotEmpty)
+                      Text(
+                        signal.holdHint,
+                        style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      ),
+                    if (isTake && signal.hasFuturesLeg) ...[
+                      const SizedBox(height: 10),
+                      const Text(
+                        'FUTURES · BACKUP',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: AppColors.accent),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        signal.futuresCanTake
+                            ? '${signal.futuresActionLabel} × ${signal.futuresLots} lots'
+                            : signal.futuresActionLabel,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                      ),
+                      if (signal.futuresCanTake && signal.futuresMaxLossInr > 0)
+                        Text(
+                          'Max loss ~₹${signal.futuresMaxLossInr.toStringAsFixed(0)} · margin ~₹${signal.futuresMarginInr.toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        )
+                      else if (signal.futuresReason.isNotEmpty)
+                        Text(
+                          signal.futuresReason,
+                          style: const TextStyle(fontSize: 11, color: AppColors.warn),
+                        )
+                      else if (signal.futuresMarginPerLotInr > 0)
+                        Text(
+                          'Margin ~₹${signal.futuresMarginPerLotInr.toStringAsFixed(0)}/lot — options preferred on small capital',
+                          style: const TextStyle(fontSize: 11, color: AppColors.warn),
+                        ),
+                    ],
                     if (signal.ivWarning != null)
                       Text(signal.ivWarning!, style: const TextStyle(fontSize: 11, color: AppColors.warn)),
                     if (signal.dteWarning != null)
@@ -492,13 +663,13 @@ class _SignalCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       OutlinedButton.icon(
                         onPressed: () {
-                          Clipboard.setData(ClipboardData(text: signal.brokerOrderHint));
+                          Clipboard.setData(ClipboardData(text: signal.combinedBrokerHint.isNotEmpty ? signal.combinedBrokerHint : signal.brokerOrderHint));
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Copied — paste in your broker app')),
                           );
                         },
                         icon: const Icon(Icons.copy_rounded, size: 16),
-                        label: const Text('Copy order'),
+                        label: Text(signal.hasFuturesLeg ? 'Copy options + futures' : 'Copy order'),
                       ),
                     ],
                   ],
@@ -508,6 +679,18 @@ class _SignalCard extends StatelessWidget {
             if (signal.decisionReason.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(signal.decisionReason, style: const TextStyle(fontSize: 13, height: 1.35)),
+            ],
+            if (signal.liveTrades >= 3) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Live track: ${signal.liveWinRate.toStringAsFixed(0)}% win (${signal.liveWins}W/${signal.liveLosses}L)'
+                '${signal.liveMaxDrawdownInr > 0 ? ' · max DD ₹${signal.liveMaxDrawdownInr.toStringAsFixed(0)}' : ''}',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: signal.liveWinRate >= 50 ? AppColors.profit : AppColors.warn,
+                ),
+              ),
             ],
             if (newsOutlook != null) ...[
               const SizedBox(height: 8),
@@ -593,6 +776,245 @@ class _SignalCard extends StatelessWidget {
         ),
         child: Text(text, style: TextStyle(fontSize: 11, color: color ?? AppColors.textPrimary, fontWeight: FontWeight.w600)),
       );
+}
+
+class _HistorySummaryBanner extends StatelessWidget {
+  const _HistorySummaryBanner({required this.summary});
+  final SignalHistorySummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: AlphaSurface(
+        accent: AppColors.accent,
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Tracked results · ${summary.takeSignals} TAKE',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+                  ),
+                ),
+                if (summary.takeOptionsWinRate > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.profit.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${summary.takeOptionsWinRate.toStringAsFixed(0)}% win',
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: AppColors.profit),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'W ${summary.takeOptionsWins} · L ${summary.takeOptionsFails} · Open ${summary.takeOptionsOpen}'
+              '${summary.takeTotalPnlInr != 0 ? ' · P&L ₹${summary.takeTotalPnlInr.toStringAsFixed(0)}' : ''}',
+              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+            ),
+            if (summary.takeMaxDrawdownInr > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                'Max drawdown ₹${summary.takeMaxDrawdownInr.toStringAsFixed(0)} (options)',
+                style: const TextStyle(fontSize: 11, color: AppColors.warn, fontWeight: FontWeight.w600),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _summaryTile(
+                    'Options',
+                    '${summary.takeOptionsWins} WIN',
+                    '${summary.takeOptionsFails} FAIL',
+                    AppColors.profit,
+                    AppColors.loss,
+                    subtitle: '${summary.takeOptionsWinRate.toStringAsFixed(0)}%',
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _summaryTile(
+                    'Futures',
+                    '${summary.futuresProfit} profit',
+                    '${summary.futuresSlHit} SL',
+                    AppColors.profit,
+                    AppColors.loss,
+                    subtitle: '${summary.takeFuturesWinRate.toStringAsFixed(0)}%',
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _summaryTile(String title, String wins, String losses, Color winColor, Color lossColor, {String subtitle = ''}) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: AppColors.bg.withValues(alpha: 0.35),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border.withValues(alpha: 0.5)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
+                if (subtitle.isNotEmpty) ...[
+                  const Spacer(),
+                  Text(subtitle, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: winColor)),
+                ],
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(wins, style: TextStyle(fontSize: 11, color: winColor, fontWeight: FontWeight.w700)),
+            Text(losses, style: TextStyle(fontSize: 11, color: lossColor, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      );
+}
+
+class _HistoryCard extends StatelessWidget {
+  const _HistoryCard({required this.item});
+  final SignalHistoryItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = item.signal;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: AlphaSurface(
+        accent: decisionAccent(s.tradeDecision),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => SetupDetailScreen(signal: s))),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(s.tradeDecision, style: TextStyle(fontWeight: FontWeight.w800, color: decisionAccent(s.tradeDecision))),
+                if (item.optionsVerdict.isNotEmpty && item.optionsVerdict != '—') ...[
+                  const SizedBox(width: 8),
+                  _verdictBadge(item.optionsVerdict),
+                ],
+                const SizedBox(width: 8),
+                if (s.directionLabel != 'NEUTRAL')
+                  Text(s.directionLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: s.directionLabel == 'LONG' ? AppColors.profit : AppColors.loss)),
+                const Spacer(),
+                Text(_shortTime(item.loggedAt), style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text('${s.setupName} · ${s.instrument}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+            if (s.actionLabel.isNotEmpty)
+              Text(s.actionLabel, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: _ResultColumn(title: 'Options', result: item.optionsResult, isOptions: true)),
+                const SizedBox(width: 10),
+                Expanded(child: _ResultColumn(title: 'Futures', result: item.futuresResult, isOptions: false)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _shortTime(String raw) {
+    if (raw.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw).toLocal();
+      return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return raw.length > 16 ? raw.substring(0, 16) : raw;
+    }
+  }
+
+  Widget _verdictBadge(String verdict) {
+    final color = verdict == 'WIN'
+        ? AppColors.profit
+        : verdict == 'FAIL'
+            ? AppColors.loss
+            : AppColors.warn;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Text(verdict, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: color)),
+    );
+  }
+}
+
+class _ResultColumn extends StatelessWidget {
+  const _ResultColumn({required this.title, required this.result, required this.isOptions});
+  final String title;
+  final TradeResult result;
+  final bool isOptions;
+
+  Color get _color {
+    if (result.isProfit) return AppColors.profit;
+    if (result.isSlHit) return AppColors.loss;
+    if (result.isOpen) return AppColors.warn;
+    return AppColors.textMuted;
+  }
+
+  String get _pnlText {
+    if (result.pnlValue == null) return result.label;
+    if (isOptions) {
+      final v = result.pnlValue!;
+      return '${v >= 0 ? '+' : ''}₹${v.toStringAsFixed(0)}';
+    }
+    final pts = result.pnlValue!;
+    return '${pts >= 0 ? '+' : ''}${pts.toStringAsFixed(1)} pts';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+      decoration: BoxDecoration(
+        color: _color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _color.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text(result.label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: _color)),
+          if (result.outcome == 'profit' || result.outcome == 'sl_hit')
+            Text(
+              result.outcome == 'profit' ? 'WIN' : 'FAIL',
+              style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: _color),
+            ),
+          if (result.pnlValue != null) ...[
+            const SizedBox(height: 2),
+            Text(_pnlText, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: _color)),
+            if (result.pnlPct != null)
+              Text('${result.pnlPct! >= 0 ? '+' : ''}${result.pnlPct!.toStringAsFixed(1)}%', style: TextStyle(fontSize: 10, color: _color)),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _SignalsEmptyState extends StatelessWidget {

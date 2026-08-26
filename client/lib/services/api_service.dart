@@ -137,6 +137,11 @@ class ApiService {
     return out;
   }
 
+  Future<SignalHistoryResponse> getSignalHistory({int limit = 50}) async {
+    final r = await _dio.get<Map<String, dynamic>>('/signals/history', queryParameters: {'limit': limit});
+    return SignalHistoryResponse.fromJson(r.data ?? {});
+  }
+
   Future<MarketIntelResponse> getMarketPredictions({int limit = 15}) async {
     final r = await _dio.get<Map<String, dynamic>>('/market/predictions', queryParameters: {'limit': limit});
     return MarketIntelResponse.fromJson(r.data ?? {});

@@ -25,6 +25,8 @@ class TradingSettings:
     crypto_live_enabled: bool = False
     kill_switch: bool = False
     risk_percent: float = 1.0
+    trading_capital_inr: float = 20000.0
+    trading_style: str = "hybrid"
 
     @property
     def indian_execution_allowed(self) -> bool:
@@ -43,6 +45,8 @@ def _from_env(settings: Settings) -> TradingSettings:
         crypto_live_enabled=settings.crypto_live_enabled,
         kill_switch=settings.kill_switch,
         risk_percent=settings.risk_percent,
+        trading_capital_inr=settings.trading_capital_inr,
+        trading_style=settings.trading_style,
     )
 
 
@@ -60,6 +64,8 @@ def load_trading_settings(session: Session) -> TradingSettings:
             crypto_live_enabled=bool(data.get("crypto_live_enabled", base.crypto_live_enabled)),
             kill_switch=bool(data.get("kill_switch", base.kill_switch)),
             risk_percent=float(data.get("risk_percent", base.risk_percent)),
+            trading_capital_inr=float(data.get("trading_capital_inr", base.trading_capital_inr)),
+            trading_style=str(data.get("trading_style", base.trading_style)),
         )
     except (json.JSONDecodeError, TypeError, ValueError):
         logger.exception("Invalid trading settings in DB — using env defaults")
@@ -77,6 +83,8 @@ def save_trading_settings(session: Session, updates: dict) -> TradingSettings:
         "crypto_live_enabled",
         "kill_switch",
         "risk_percent",
+        "trading_capital_inr",
+        "trading_style",
     ):
         if key in updates and updates[key] is not None:
             data[key] = updates[key]
@@ -91,7 +99,12 @@ def save_trading_settings(session: Session, updates: dict) -> TradingSettings:
     if data["crypto_paper_trading"]:
         data["crypto_live_enabled"] = False
 
-    data["risk_percent"] = max(0.1, min(float(data["risk_percent"]), 5.0))
+    data["risk_percent"] = max(0.1, min(float(data["risk_percent"]), 3.0))
+    data["trading_capital_inr"] = max(5000.0, min(float(data["trading_capital_inr"]), 5000000.0))
+    style = str(data.get("trading_style", "hybrid")).lower()
+    if style not in ("scalp", "swing", "hybrid"):
+        style = "hybrid"
+    data["trading_style"] = style
     saved = TradingSettings(**data)
 
     row = session.get(AppSecret, TRADING_SETTINGS_KEY)

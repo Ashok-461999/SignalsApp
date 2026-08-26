@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.core.index_config import INDEX_SYMBOLS
 from app.data.models import SignalLog
 from app.db.session import get_sync_session
+from app.services.signal_outcomes import build_history_summary, enrich_history_row
+from app.services.signal_performance import load_global_live_stats
 from app.signals.scanner import signal_scanner
 
 logger = logging.getLogger(__name__)
@@ -78,7 +80,20 @@ def get_signal_history(
     signals = []
     for row in rows:
         try:
-            signals.append(json.loads(row.payload))
+            payload = json.loads(row.payload)
+            signals.append(enrich_history_row(session, row, payload))
         except json.JSONDecodeError:
             continue
-    return {"count": len(signals), "signals": signals}
+    session.commit()
+    return {
+        "count": len(signals),
+        "summary": build_history_summary(signals),
+        "live_performance": load_global_live_stats(session),
+        "signals": signals,
+    }
+
+
+@router.get("/performance")
+def get_signal_performance(session: Session = Depends(get_sync_session)) -> dict:
+    """Live tracked win rate and drawdown from stored predictions."""
+    return load_global_live_stats(session)

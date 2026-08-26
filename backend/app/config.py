@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     live_execution_enabled: bool = False
     kill_switch: bool = False
     risk_percent: float = 1.0
+    trading_capital_inr: float = 20000.0
+    trading_style: str = "hybrid"  # scalp | swing | hybrid
 
     # Crypto — keys stored encrypted in DB; Claude key stays on phone only
     crypto_storage_secret: str = ""
@@ -40,8 +42,13 @@ class Settings(BaseSettings):
     # Signals — set false to fire on setup detection without backtest validation
     require_backtest_for_signals: bool = False
 
-    # Options — minimum days to expiry for suggested contracts (user preference: 20+ DTE)
+    # Options — minimum days to expiry for suggested contracts
     min_option_dte: int = 20
+    min_option_dte_scalp: int = 0  # nearest weekly for scalping
+
+    # Scalping — quick in/out on 5m bars (~30 min hold)
+    scalp_holding_bars: int = 6  # 6 x 5m = 30 min scalp window
+    scalp_min_confidence: int = 65  # min score to recommend TAKE for scalpers
 
     @property
     def database_url(self) -> str:

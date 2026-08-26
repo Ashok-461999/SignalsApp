@@ -57,6 +57,8 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  const Text('OPTIONS · PRIMARY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.profit)),
+                  const SizedBox(height: 4),
                   const Text('Place in broker', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                   Text(s.brokerOrderHint, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: AppColors.profit)),
                   const SizedBox(height: 8),
@@ -64,17 +66,72 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: s.brokerOrderHint));
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Order copied — open your broker app')),
+                        const SnackBar(content: Text('Options order copied')),
                       );
                     },
                     icon: const Icon(Icons.copy_rounded, size: 18),
-                    label: const Text('Copy to broker'),
+                    label: const Text('Copy options order'),
                   ),
                   if (s.entryPremiumEstimate > 0)
                     Text(
                       'Est. premium ~₹${s.entryPremiumEstimate.toStringAsFixed(0)} per unit · IV ${s.ivPercentile.toStringAsFixed(0)}%',
                       style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                     ),
+                  if (s.maxLossInr > 0)
+                    Text(
+                      'Max loss ~₹${s.maxLossInr.toStringAsFixed(0)} · need ~₹${s.premiumRequiredInr.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                ],
+              ),
+            ),
+          ],
+          if (s.hasFuturesLeg) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceHigh,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('FUTURES · BACKUP', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.accent)),
+                  const SizedBox(height: 4),
+                  Text(
+                    s.dualLegNote.isNotEmpty ? s.dualLegNote : 'If option SL hits but index keeps moving',
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    s.futuresCanTake
+                        ? '${s.futuresActionLabel} × ${s.futuresLots} lots'
+                        : s.futuresActionLabel,
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                  ),
+                  if (s.futuresCanTake && s.futuresBrokerHint.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: s.futuresBrokerHint));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Futures order copied')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 18),
+                      label: const Text('Copy futures order'),
+                    ),
+                  ],
+                  if (s.futuresCanTake && s.futuresMaxLossInr > 0)
+                    Text(
+                      'Max loss ~₹${s.futuresMaxLossInr.toStringAsFixed(0)} · margin ~₹${s.futuresMarginInr.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    )
+                  else if (s.futuresReason.isNotEmpty)
+                    Text(s.futuresReason, style: const TextStyle(fontSize: 12, color: AppColors.warn)),
                 ],
               ),
             ),
@@ -112,7 +169,7 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _SectionTitle('Options trade', icon: Icons.receipt_long_rounded),
+          _SectionTitle('Options trade (primary)', icon: Icons.receipt_long_rounded),
           _MetricGrid(children: [
             _MetricTile(label: 'Strike', value: s.optionLabel.isNotEmpty ? s.optionLabel : s.suggestedStrike.toStringAsFixed(0), icon: Icons.tag_rounded),
             _MetricTile(label: 'Expiry', value: s.expiryLabel.isNotEmpty ? s.expiryLabel : s.suggestedExpiry, icon: Icons.event_rounded),
@@ -120,6 +177,17 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
             _MetricTile(label: 'Lots', value: '${s.positionSize}', icon: Icons.pie_chart_rounded),
             _MetricTile(label: 'IV %ile', value: '${s.ivPercentile.toStringAsFixed(0)}%', icon: Icons.waves_rounded),
             _MetricTile(label: 'Prem @ SL', value: s.premiumStopReference.toStringAsFixed(1), icon: Icons.warning_amber_rounded),
+            _MetricTile(label: 'Max loss', value: s.maxLossInr > 0 ? '₹${s.maxLossInr.toStringAsFixed(0)}' : '—', icon: Icons.warning_amber_rounded),
+          ]),
+          const SizedBox(height: 16),
+          _SectionTitle('Futures trade (backup)', icon: Icons.show_chart_rounded),
+          _MetricGrid(children: [
+            _MetricTile(label: 'Action', value: s.futuresActionLabel.isNotEmpty ? s.futuresActionLabel : '—', icon: Icons.swap_horiz_rounded),
+            _MetricTile(label: 'Lots', value: s.futuresLots > 0 ? '${s.futuresLots}' : '—', icon: Icons.pie_chart_rounded),
+            _MetricTile(label: 'Max loss', value: s.futuresMaxLossInr > 0 ? '₹${s.futuresMaxLossInr.toStringAsFixed(0)}' : '—', icon: Icons.warning_amber_rounded),
+            _MetricTile(label: 'Margin est.', value: s.futuresMarginInr > 0 ? '₹${s.futuresMarginInr.toStringAsFixed(0)}' : '—', icon: Icons.account_balance_wallet_rounded),
+            _MetricTile(label: 'Margin/lot', value: s.futuresMarginPerLotInr > 0 ? '₹${s.futuresMarginPerLotInr.toStringAsFixed(0)}' : '—', icon: Icons.payments_rounded),
+            _MetricTile(label: 'Affordable', value: s.futuresCanTake ? 'Yes' : 'No', icon: Icons.check_circle_outline_rounded, valueColor: s.futuresCanTake ? AppColors.profit : AppColors.warn),
           ]),
           const SizedBox(height: 16),
           _SectionTitle('Underlying plan', icon: Icons.route_rounded),
@@ -137,7 +205,26 @@ class _SetupDetailScreenState extends ConsumerState<SetupDetailScreen> {
             _MetricTile(label: 'R:R', value: s.riskReward.toStringAsFixed(2), icon: Icons.balance_rounded),
           ]),
           const SizedBox(height: 16),
-          _SectionTitle('Backtest', icon: Icons.history_rounded),
+          _SectionTitle('Backtest (before you trade)', icon: Icons.science_rounded),
+          _MetricGrid(children: [
+            _MetricTile(
+              label: 'Verdict',
+              value: s.backtestVerdict == 'PROFITABLE' ? 'Profitable' : s.backtestVerdict == 'NOT_PROFITABLE' ? 'Not profitable' : s.backtestVerdict,
+              icon: Icons.verified_rounded,
+              valueColor: s.backtestOk ? AppColors.profit : s.backtestFailed ? AppColors.loss : AppColors.warn,
+            ),
+            _MetricTile(label: 'Win rate', value: s.backtestWinRate > 0 ? '${s.backtestWinRate.toStringAsFixed(0)}%' : '—', icon: Icons.percent_rounded),
+            _MetricTile(label: 'Profit factor', value: s.backtestProfitFactor > 0 ? s.backtestProfitFactor.toStringAsFixed(2) : '—', icon: Icons.trending_up_rounded),
+            _MetricTile(label: 'Expectancy', value: s.backtestExpectancy != 0 ? '${s.backtestExpectancy.toStringAsFixed(1)} pts' : '—', icon: Icons.show_chart_rounded),
+            _MetricTile(label: 'Max DD', value: s.backtestMaxDrawdown > 0 ? s.backtestMaxDrawdown.toStringAsFixed(0) : '—', icon: Icons.trending_down_rounded),
+            _MetricTile(label: 'Trades', value: s.backtestTradeCount > 0 ? '${s.backtestTradeCount}' : '—', icon: Icons.history_rounded),
+          ]),
+          if (s.backtestSummary.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(s.backtestSummary, style: TextStyle(fontSize: 12, color: s.backtestOk ? AppColors.profit : AppColors.warn)),
+          ],
+          const SizedBox(height: 16),
+          _SectionTitle('Backtest registry', icon: Icons.history_rounded),
           _MetricGrid(children: [
             _MetricTile(label: 'Win rate', value: '${s.backtestStats['win_rate'] ?? '—'}%', icon: Icons.percent_rounded),
             _MetricTile(label: 'Expectancy', value: '${s.backtestStats['expectancy'] ?? '—'}', icon: Icons.trending_up_rounded),

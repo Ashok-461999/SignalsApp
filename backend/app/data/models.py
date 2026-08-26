@@ -99,6 +99,30 @@ class SignalLog(Base):
     )
 
 
+class SignalPrediction(Base):
+    """Stored take/skip prediction per signal — updated when outcome resolves."""
+
+    __tablename__ = "signal_predictions"
+    __table_args__ = (Index("ix_signal_pred_created", "created_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    signal_log_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    setup_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    instrument: Mapped[str] = mapped_column(String(32), nullable=False)
+    trade_decision: Mapped[str] = mapped_column(String(16), nullable=False, default="NO_TRADE")
+    can_take: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    take_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    prediction: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    trading_style: Mapped[str] = mapped_column(String(16), nullable=False, default="scalp")
+    options_outcome: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    futures_outcome: Mapped[str] = mapped_column(String(32), nullable=False, default="")
+    options_pnl: Mapped[float | None] = mapped_column(Float, nullable=True)
+    resolved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+
+
 class AppSecret(Base):
     """Encrypted app secrets (crypto API keys, etc.) — never returned to clients."""
 

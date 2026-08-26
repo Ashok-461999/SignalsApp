@@ -59,6 +59,41 @@ def _run_gap_backfill() -> None:
     threading.Thread(target=_runner, name="gap-backfill", daemon=True).start()
 
 
+def _backtest_worker() -> None:
+    from app.backtest.engine import load_candles_for_backtest, persist_backtest, run_backtest
+    from app.core.index_config import INDEX_SYMBOLS
+    from app.db.session import SyncSessionLocal
+    from app.signals.registry import load_latest_from_db
+    from app.signals.setups import SETUP_FUNCTIONS
+
+    session = SyncSessionLocal()
+    try:
+        for instrument in INDEX_SYMBOLS:
+            df = load_candles_for_backtest(session, instrument, "spot", "5m", limit=8000)
+            if df.empty or len(df) < 120:
+                continue
+            from_date = str(df.iloc[0].get("timestamp", ""))[:10]
+            to_date = str(df.iloc[-1].get("timestamp", ""))[:10]
+            for setup_name in SETUP_FUNCTIONS:
+                try:
+                    report = run_backtest(
+                        df, setup_name, instrument, "spot", "5m", from_date, to_date
+                    )
+                    persist_backtest(session, report)
+                except Exception:
+                    logger.exception("Backtest failed %s %s", setup_name, instrument)
+        load_latest_from_db(session)
+        logger.info("Scheduled setup backtests completed")
+    except Exception:
+        logger.exception("Scheduled backtest job failed")
+    finally:
+        session.close()
+
+
+def _run_setup_backtests() -> None:
+    threading.Thread(target=_backtest_worker, name="setup-backtests", daemon=True).start()
+
+
 def start_scheduler() -> BackgroundScheduler | None:
     global _scheduler
     settings = get_settings()
@@ -84,6 +119,15 @@ def start_scheduler() -> BackgroundScheduler | None:
         max_instances=1,
         coalesce=True,
         misfire_grace_time=600,
+    )
+    _scheduler.add_job(
+        _run_setup_backtests,
+        IntervalTrigger(hours=24),
+        id="setup_backtests",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=3600,
     )
     _scheduler.start()
     logger.info("Background scheduler started")
