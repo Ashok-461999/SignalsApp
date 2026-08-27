@@ -90,3 +90,79 @@ def premium_at_underlying_stop(
     """Info-only premium reference when underlying hits stop."""
     opt = "call" if direction == "bullish" else "put"
     return black_scholes_price(underlying_stop, strike, days_to_expiry, iv, opt)
+
+
+def scalp_expiry(instrument: str, from_date: date | None = None) -> date:
+    """Nearest weekly expiry for scalp option pricing (higher gamma, less index move needed)."""
+    return nearest_expiry_min_days(
+        from_date=from_date,
+        min_days=0,
+        expiry_weekday=expiry_weekday_for(instrument),
+    )
+
+
+def build_option_trade_plan(
+    instrument: str,
+    entry: float,
+    stop: float,
+    target: float,
+    direction: str,
+    iv: float,
+    lots: int = 1,
+    use_weekly: bool = True,
+) -> dict[str, float | str | int]:
+    """
+  Broker-style option plan: small index move → larger premium move (weekly ATM).
+  Example: Buy ~₹130 · Target ₹160 · SL below ₹100
+  """
+    from app.core.index_config import LOT_SIZES
+
+    step = strike_step(instrument)
+    lot_size = LOT_SIZES.get(instrument.upper(), 25)
+    strike = atm_strike(entry, step)
+    expiry = scalp_expiry(instrument) if use_weekly else nearest_expiry_min_days(
+        min_days=20, expiry_weekday=expiry_weekday_for(instrument)
+    )
+    days = float(days_until_expiry(expiry))
+    opt = "call" if direction == "bullish" else "put"
+    iv_use = max(0.10, min(0.40, iv if iv > 0.05 else 0.16))
+
+    entry_prem = black_scholes_price(entry, strike, days, iv_use, opt)
+    prem_target = black_scholes_price(target, strike, days, iv_use, opt)
+    prem_stop = black_scholes_price(stop, strike, days, iv_use, opt)
+
+    # Floor realistic scalp premiums for index weeklies
+    entry_prem = max(entry_prem, 15.0)
+    prem_stop = max(min(prem_stop, entry_prem * 0.78), entry_prem * 0.55)
+    if prem_target <= entry_prem:
+        prem_target = entry_prem * 1.22
+
+    index_pts = abs(target - entry)
+    index_pct = (index_pts / entry * 100) if entry > 0 else 0.0
+    prem_gain = prem_target - entry_prem
+    prem_gain_pct = (prem_gain / entry_prem * 100) if entry_prem > 0 else 0.0
+    prem_loss = entry_prem - prem_stop
+    expected_profit_inr = round(prem_gain * lot_size * max(lots, 1), 2)
+    max_loss_inr = round(prem_loss * lot_size * max(lots, 1), 2)
+
+    return {
+        "suggested_strike": strike,
+        "suggested_expiry": expiry.isoformat(),
+        "days_to_expiry": int(days),
+        "option_type": "CE" if direction == "bullish" else "PE",
+        "premium_entry": round(entry_prem, 2),
+        "premium_target": round(prem_target, 2),
+        "premium_stop": round(prem_stop, 2),
+        "premium_gain_pct": round(prem_gain_pct, 1),
+        "index_move_pts": round(index_pts, 1),
+        "index_move_pct": round(index_pct, 2),
+        "expected_profit_inr": expected_profit_inr,
+        "max_loss_premium_inr": max_loss_inr,
+        "option_trade_plan": (
+            f"Buy ~₹{entry_prem:.0f} · Target ₹{prem_target:.0f} · STRICT SL ₹{prem_stop:.0f}"
+        ),
+        "option_trade_plan_en": (
+            f"Index only {index_pct:.2f}% ({index_pts:.0f} pts) → premium +{prem_gain_pct:.0f}% "
+            f"(~₹{expected_profit_inr:,.0f} profit on {max(lots, 1)} lot)"
+        ),
+    }

@@ -60,7 +60,9 @@ def _parse_ts(value: str | datetime | None) -> datetime | None:
         return None
 
 
-def _outcome_label(outcome: str) -> str:
+def _outcome_label(outcome: str, premium_stop: float = 0) -> str:
+    if outcome == "sl_hit" and premium_stop > 0:
+        return f"SL hit — exit below ₹{premium_stop:.0f}"
     return {
         "profit": "Target hit",
         "sl_hit": "SL hit",
@@ -75,13 +77,15 @@ def _result_dict(
     pnl_value: float | None = None,
     pnl_pct: float | None = None,
     exit_reason: str = "",
+    premium_stop: float = 0,
 ) -> dict[str, Any]:
     return {
         "outcome": outcome,
-        "label": _outcome_label(outcome),
+        "label": _outcome_label(outcome, premium_stop),
         "pnl_value": round(pnl_value, 2) if pnl_value is not None else None,
         "pnl_pct": round(pnl_pct, 2) if pnl_pct is not None else None,
         "exit_reason": exit_reason,
+        "premium_stop_hit": premium_stop if outcome == "sl_hit" and premium_stop > 0 else None,
     }
 
 
@@ -118,11 +122,14 @@ def resolve_outcomes(session: Session, sig: dict, logged_at: datetime | None = N
     segment = sig.get("segment") or "spot"
     trade_decision = sig.get("trade_decision") or "NO_TRADE"
     position_size = int(sig.get("position_size") or 1)
-    entry_prem = float(sig.get("entry_premium_estimate") or 0)
+    entry_prem = float(sig.get("entry_premium_estimate") or sig.get("premium_entry") or 0)
     strike = float(sig.get("suggested_strike") or 0)
     days_to_exp = float(sig.get("days_to_expiry") or 7)
     iv_pct = float(sig.get("iv_percentile") or 50)
     iv = max(0.08, min(0.45, iv_pct / 100.0 * 0.2 + 0.1))
+    prem_sl_ref = float(
+        sig.get("premium_stop") or sig.get("strict_sl_premium") or sig.get("premium_stop_reference") or 0
+    )
 
     holding = _holding_bars_for_signal(session, sig)
 
@@ -207,17 +214,15 @@ def resolve_outcomes(session: Session, sig: dict, logged_at: datetime | None = N
     elif exit_reason.startswith("target"):
         fut_outcome = "profit"
 
-    futures_result = _result_dict(fut_outcome, fut_points, fut_pct, exit_reason)
+    futures_result = _result_dict(fut_outcome, fut_points, fut_pct, exit_reason, prem_sl_ref)
 
     # Options P&L estimate
     if strike <= 0 or entry_prem <= 0:
         options_result = _result_dict("na")
     else:
         days_left = max(days_to_exp - exit_bar_idx * (5 / (24 * 60)) * 0.2, 0.5)
-        if exit_reason == "stop" and float(sig.get("premium_stop_reference") or 0) > 0:
-            exit_prem = apply_slippage(
-                float(sig["premium_stop_reference"]), "sell", cfg.slippage_pct
-            )
+        if exit_reason == "stop" and prem_sl_ref > 0:
+            exit_prem = apply_slippage(prem_sl_ref, "sell", cfg.slippage_pct)
         else:
             exit_prem = black_scholes_price(exit_underlying, strike, days_left, iv, opt_type)
             exit_prem = apply_slippage(exit_prem, "sell", cfg.slippage_pct)
@@ -231,7 +236,7 @@ def resolve_outcomes(session: Session, sig: dict, logged_at: datetime | None = N
             opt_outcome = "sl_hit"
         elif exit_reason.startswith("target"):
             opt_outcome = "profit" if opt_pnl >= 0 else "sl_hit"
-        options_result = _result_dict(opt_outcome, opt_pnl, opt_pct, exit_reason)
+        options_result = _result_dict(opt_outcome, opt_pnl, opt_pct, exit_reason, prem_sl_ref)
 
     return {
         "futures_result": futures_result,

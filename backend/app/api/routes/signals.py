@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.index_config import INDEX_SYMBOLS
 from app.data.models import SignalLog
 from app.db.session import get_sync_session
-from app.services.signal_outcomes import build_history_summary, enrich_history_row
+from app.services.signal_outcomes import build_history_summary, enrich_history_row, resolve_outcomes
 from app.services.signal_performance import load_global_live_stats
 from app.signals.scanner import signal_scanner
 
@@ -19,9 +19,21 @@ router = APIRouter(prefix="/signals", tags=["signals"])
 
 
 @router.get("")
-def get_active_signals() -> dict:
+def get_active_signals(session: Session = Depends(get_sync_session)) -> dict:
     """TAKE signals only — trade these in your broker app."""
-    signals = signal_scanner.get_active_signals()
+    signals = []
+    for raw in signal_scanner.get_active_signals():
+        sig = dict(raw)
+        if sig.get("can_take"):
+            live = resolve_outcomes(session, sig)
+            opt = live.get("options_result") or {}
+            sig["live_status"] = opt.get("outcome", "open")
+            sig["live_status_label"] = opt.get("label", "Still open")
+            if opt.get("outcome") == "sl_hit":
+                sig["sl_hit"] = True
+                sig["sl_hit_premium"] = opt.get("premium_stop_hit") or sig.get("premium_stop")
+        signals.append(sig)
+    session.commit()
     regimes = {
         inst: signal_scanner.get_regime(inst)
         for inst in INDEX_SYMBOLS

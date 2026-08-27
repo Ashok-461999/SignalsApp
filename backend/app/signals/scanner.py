@@ -10,10 +10,12 @@ from sqlalchemy import func, select
 from app.backtest.options import (
     atm_strike,
     black_scholes_price,
+    build_option_trade_plan,
     days_until_expiry,
     expiry_weekday_for,
     nearest_expiry_min_days,
     premium_at_underlying_stop,
+    scalp_expiry,
     strike_step,
 )
 from app.config import get_settings
@@ -60,8 +62,35 @@ class SignalScanner:
         ]
 
     def get_all_evaluations(self) -> list[dict]:
-        """Live TAKE signals only — no 70+ NO_TRADE spam."""
-        return self.get_active_signals()
+        """TAKE signals + per-index market status so the app is never blank."""
+        takes = self.get_active_signals()
+        out = list(takes)
+        taken = {s.get("instrument") for s in takes}
+        for inst, reg in self._last_regime.items():
+            if inst in taken:
+                continue
+            regime = reg.get("regime", "")
+            out.append(
+                {
+                    "setup_name": "market_regime",
+                    "instrument": inst,
+                    "segment": "spot",
+                    "direction": "neutral",
+                    "trade_decision": "SIT_OUT" if regime == "ranging" else "NO_TRADE",
+                    "decision_reason": reg.get("summary", "Waiting for setup"),
+                    "regime": regime,
+                    "adx": reg.get("adx"),
+                    "can_take": False,
+                    "tradable": False,
+                    "timestamp": reg.get("timestamp", ""),
+                    "prediction": (
+                        "Choppy market — sit out options"
+                        if regime == "ranging"
+                        else "Scanning — no TAKE yet"
+                    ),
+                }
+            )
+        return out
 
     def _ist_today(self) -> str:
         ist = timezone(timedelta(hours=5, minutes=30))
@@ -257,9 +286,10 @@ class SignalScanner:
 
             min_dte = (
                 settings.min_option_dte_scalp
-                if trade_style == "scalp"
+                if trade_style in ("scalp", "hybrid")
                 else settings.min_option_dte
             )
+            use_weekly_options = trade_style in ("scalp", "hybrid")
 
             direction = result.direction or regime_snap.trend_direction
             if direction == "neutral":
@@ -269,9 +299,13 @@ class SignalScanner:
             entry = result.entry or float(df.iloc[-1]["close"])
             stop = result.stop_loss or entry
             strike = atm_strike(entry, step)
-            expiry = nearest_expiry_min_days(
-                min_days=min_dte,
-                expiry_weekday=expiry_weekday_for(instrument),
+            expiry = (
+                scalp_expiry(instrument)
+                if use_weekly_options
+                else nearest_expiry_min_days(
+                    min_days=min_dte,
+                    expiry_weekday=expiry_weekday_for(instrument),
+                )
             )
             lot = LOT_SIZES.get(instrument, 25)
 
@@ -352,6 +386,20 @@ class SignalScanner:
                 else 0.0
             )
 
+            if result.fired and decision.get("can_take"):
+                plan = build_option_trade_plan(
+                    instrument,
+                    entry,
+                    stop,
+                    target_px,
+                    direction,
+                    iv,
+                    lots=max(size, 1),
+                    use_weekly=use_weekly_options,
+                )
+            else:
+                plan = {}
+
             payload = SignalPayload(
                 setup_name=setup_name,
                 instrument=instrument,
@@ -427,16 +475,31 @@ class SignalScanner:
             sig["backtest_expectancy"] = bt_info.get("backtest_expectancy", 0)
             sig["backtest_max_drawdown"] = bt_info.get("backtest_max_drawdown", 0)
             sig["backtest_trade_count"] = bt_info.get("backtest_trade_count", 0)
-            sig["premium_entry"] = round(entry_prem, 2) if result.fired else 0
-            sig["premium_target"] = round(prem_target, 2) if result.fired else 0
-            sig["premium_stop"] = round(prem_stop, 2) if result.fired else 0
-            if result.fired and entry_prem > 0:
-                sig["option_trade_plan"] = (
-                    f"Buy ~₹{entry_prem:.0f} · Target ₹{prem_target:.0f} · SL below ₹{prem_stop:.0f}"
+            sig["premium_entry"] = round(
+                float(plan.get("premium_entry") or entry_prem), 2
+            ) if result.fired else 0
+            sig["premium_target"] = round(
+                float(plan.get("premium_target") or prem_target), 2
+            ) if result.fired else 0
+            sig["premium_stop"] = round(
+                float(plan.get("premium_stop") or prem_stop), 2
+            ) if result.fired else 0
+            sig["premium_gain_pct"] = float(plan.get("premium_gain_pct") or 0)
+            sig["index_move_pts"] = float(plan.get("index_move_pts") or 0)
+            sig["index_move_pct"] = float(plan.get("index_move_pct") or 0)
+            sig["expected_profit_inr"] = float(plan.get("expected_profit_inr") or 0)
+            sig["strict_sl_premium"] = sig["premium_stop"]
+            if result.fired and sig["premium_entry"] > 0:
+                sig["option_trade_plan"] = str(
+                    plan.get("option_trade_plan")
+                    or f"Buy ~₹{entry_prem:.0f} · Target ₹{prem_target:.0f} · STRICT SL ₹{prem_stop:.0f}"
                 )
-                sig["option_trade_plan_en"] = (
-                    f"Enter premium ~{entry_prem:.0f}, book profit near {prem_target:.0f}, "
-                    f"exit if premium drops below {prem_stop:.0f}"
+                sig["option_trade_plan_en"] = str(
+                    plan.get("option_trade_plan_en")
+                    or (
+                        f"Enter premium ~{entry_prem:.0f}, book near {prem_target:.0f}, "
+                        f"exit if premium drops below {prem_stop:.0f}"
+                    )
                 )
             else:
                 sig["option_trade_plan"] = ""

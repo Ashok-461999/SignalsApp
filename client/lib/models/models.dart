@@ -57,6 +57,14 @@ class SignalModel {
   final double premiumTarget;
   final double premiumStop;
   final String optionTradePlan;
+  final String optionTradePlanEn;
+  final double premiumGainPct;
+  final double indexMovePts;
+  final double indexMovePct;
+  final double expectedProfitInr;
+  final bool slHit;
+  final double slHitPremium;
+  final String liveStatusLabel;
 
   SignalModel({
     required this.setupName,
@@ -117,6 +125,14 @@ class SignalModel {
     this.premiumTarget = 0,
     this.premiumStop = 0,
     this.optionTradePlan = '',
+    this.optionTradePlanEn = '',
+    this.premiumGainPct = 0,
+    this.indexMovePts = 0,
+    this.indexMovePct = 0,
+    this.expectedProfitInr = 0,
+    this.slHit = false,
+    this.slHitPremium = 0,
+    this.liveStatusLabel = '',
   });
 
   bool get backtestOk => backtestVerdict == 'PROFITABLE';
@@ -187,8 +203,16 @@ class SignalModel {
 
   String get profitSummary {
     final parts = <String>[];
+    if (premiumGainPct > 0 && indexMovePct > 0) {
+      parts.add(
+        'Index ${indexMovePct.toStringAsFixed(2)}% (${indexMovePts.toStringAsFixed(0)} pts) → premium +${premiumGainPct.toStringAsFixed(0)}%',
+      );
+    }
+    if (expectedProfitInr > 0) {
+      parts.add('Profit ~₹${expectedProfitInr.toStringAsFixed(0)}');
+    }
     final move = targetMovePercent;
-    if (move != null && move > 0) {
+    if (move != null && move > 0 && parts.isEmpty) {
       parts.add('${move >= 0 ? '+' : ''}${move.toStringAsFixed(2)}% target');
     }
     final wr = winRatePercent;
@@ -319,6 +343,14 @@ class SignalModel {
         premiumTarget: _dbl(json['premium_target']),
         premiumStop: _dbl(json['premium_stop'], _dbl(json['premium_stop_reference'])),
         optionTradePlan: json['option_trade_plan'] as String? ?? '',
+        optionTradePlanEn: json['option_trade_plan_en'] as String? ?? '',
+        premiumGainPct: _dbl(json['premium_gain_pct']),
+        indexMovePts: _dbl(json['index_move_pts']),
+        indexMovePct: _dbl(json['index_move_pct']),
+        expectedProfitInr: _dbl(json['expected_profit_inr']),
+        slHit: json['sl_hit'] as bool? ?? false,
+        slHitPremium: _dbl(json['sl_hit_premium']),
+        liveStatusLabel: json['live_status_label'] as String? ?? '',
       );
 
   static int _liveInt(Map<String, dynamic> json, String key) {

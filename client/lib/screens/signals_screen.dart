@@ -205,6 +205,7 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
               return SliverFillRemaining(
                 child: _SignalsEmptyState(
                   health: health,
+                  regimes: regimes,
                   onRetry: () {
                     ref.invalidate(healthProvider);
                     ref.invalidate(activeSignalsProvider);
@@ -296,7 +297,7 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
             _GuideRow(icon: Icons.nightlight_round, color: AppColors.textMuted, text: 'SIT_OUT — ranging day, avoid buying options'),
             SizedBox(height: 8),
             _GuideRow(icon: Icons.candlestick_chart_rounded, color: AppColors.accent, text: 'Setups: FVG retest & liquidity sweep (not EMA) + news on Intel tab'),
-            _GuideRow(icon: Icons.calendar_month_rounded, color: AppColors.accent, text: 'Expiry is 20+ days out (monthly-style) — matches your holding style'),
+            _GuideRow(icon: Icons.calendar_month_rounded, color: AppColors.accent, text: 'Weekly ATM options for scalp — small index move, bigger premium gain'),
           ],
         ),
       ),
@@ -605,6 +606,24 @@ class _SignalCard extends StatelessWidget {
                           color: signal.daysToExpiry >= 20 ? AppColors.textMuted : AppColors.warn,
                         ),
                       ),
+                    if (isTake && signal.slHit) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.loss.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.loss.withValues(alpha: 0.5)),
+                        ),
+                        child: Text(
+                          signal.liveStatusLabel.isNotEmpty
+                              ? signal.liveStatusLabel
+                              : 'STRICT SL HIT — exit if premium below ₹${signal.premiumStop.toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: AppColors.loss),
+                        ),
+                      ),
+                    ],
                     if (isTake && signal.optionTradePlan.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Container(
@@ -629,9 +648,23 @@ class _SignalCard extends StatelessWidget {
                             ),
                             if (signal.premiumEntry > 0)
                               Text(
-                                'Buy near ₹${signal.premiumEntry.toStringAsFixed(0)} → sell near ₹${signal.premiumTarget.toStringAsFixed(0)} · SL if below ₹${signal.premiumStop.toStringAsFixed(0)}',
+                                'Buy ₹${signal.premiumEntry.toStringAsFixed(0)} → Target ₹${signal.premiumTarget.toStringAsFixed(0)} · STRICT SL ₹${signal.premiumStop.toStringAsFixed(0)}',
                                 style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                               ),
+                            if (signal.optionTradePlanEn.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                signal.optionTradePlanEn,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.profit),
+                              ),
+                            ],
+                            if (signal.expectedProfitInr > 0) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Expected profit ~₹${signal.expectedProfitInr.toStringAsFixed(0)} on ${signal.positionSize > 0 ? signal.positionSize : 1} lot(s) · exit if premium < ₹${signal.premiumStop.toStringAsFixed(0)}',
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.profit),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -951,6 +984,16 @@ class _HistoryCard extends StatelessWidget {
             Text('${s.setupName} · ${s.instrument}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
             if (s.actionLabel.isNotEmpty)
               Text(s.actionLabel, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            if (s.premiumEntry > 0)
+              Text(
+                'Premium ₹${s.premiumEntry.toStringAsFixed(0)} → ₹${s.premiumTarget.toStringAsFixed(0)} · SL ₹${s.premiumStop.toStringAsFixed(0)}',
+                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+              ),
+            if (item.optionsResult.isSlHit && s.premiumStop > 0)
+              Text(
+                'STRICT SL hit — premium went below ₹${s.premiumStop.toStringAsFixed(0)}',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: AppColors.loss),
+              ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1049,9 +1092,14 @@ class _ResultColumn extends StatelessWidget {
 }
 
 class _SignalsEmptyState extends StatelessWidget {
-  const _SignalsEmptyState({required this.health, required this.onRetry});
+  const _SignalsEmptyState({
+    required this.health,
+    required this.onRetry,
+    required this.regimes,
+  });
 
   final AsyncValue<dynamic> health;
+  final AsyncValue<Map<String, dynamic>> regimes;
   final VoidCallback onRetry;
 
   @override
@@ -1075,11 +1123,37 @@ class _SignalsEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 14),
             Text(
-              offline ? 'Cannot load signals' : 'No option signals yet',
+              offline ? 'Cannot load signals' : 'No CAN TAKE signal right now',
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 10),
+            regimes.when(
+              data: (data) {
+                final items = data['regimes'] as Map<String, dynamic>? ?? {};
+                if (items.isEmpty) return const SizedBox.shrink();
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    children: items.entries.map((e) {
+                      final reg = e.value as Map<String, dynamic>? ?? {};
+                      final label = reg['regime'] as String? ?? '—';
+                      final adx = reg['adx'];
+                      return Text(
+                        '${e.key}: ${label.toUpperCase()}${adx != null ? ' (ADX $adx)' : ''}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: label == 'ranging' ? AppColors.warn : AppColors.textMuted,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
             Text(
               offline
                   ? 'Server is offline. Tap Retry — or check Markets tab for live prices.'
