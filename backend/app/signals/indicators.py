@@ -59,6 +59,9 @@ def add_standard_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Attach commonly used columns for setups (no indicator soup — explicit adds only)."""
     d = ensure_ohlcv(df)
     d = d.copy()
+    if "timestamp" in d.columns:
+        d = d.sort_values("timestamp")
+        d.index = pd.DatetimeIndex(pd.to_datetime(d["timestamp"], utc=True))
     d["ema_20"] = ema(d, 20)
     d["ema_50"] = ema(d, 50)
     d["rsi_14"] = rsi(d, 14)
