@@ -143,17 +143,6 @@ def evaluate_trade_decision(
         "prediction": "Skip — conditions not met",
     }
 
-    if regime.regime == Regime.RANGING:
-        return {
-            **base,
-            "trade_decision": "SIT_OUT",
-            "decision_reason": (
-                "Ranging market — bad for scalping. Theta eats option buyers. Sit out."
-            ),
-            "strategy_fit": "none — sit out",
-            "prediction": "Do not trade — choppy range",
-        }
-
     if not result.fired:
         return {
             **base,
@@ -163,10 +152,22 @@ def evaluate_trade_decision(
             "prediction": "Wait — no setup yet",
         }
 
+    if regime.regime == Regime.RANGING and not setup_allowed_in_regime(setup_name, regime.regime):
+        return {
+            **base,
+            "trade_decision": "NO_TRADE",
+            "decision_reason": (
+                f"Ranging market (ADX {regime.adx:.0f}) — only liquidity sweep setups. "
+                f"{setup_name} not suitable."
+            ),
+            "strategy_fit": "ranging — wrong setup",
+            "prediction": "Skip — ranging day, wrong setup",
+        }
+
     if not setup_allowed_in_regime(setup_name, regime.regime):
         fit_map = {
             Regime.TRENDING: "Scalp FVG retest, liquidity sweep, or ORB on trending days",
-            Regime.RANGING: "Sit out",
+            Regime.RANGING: "Liquidity sweep only",
             Regime.VOLATILE: "FVG + sweep only, half size",
         }
         return {
@@ -206,29 +207,28 @@ def evaluate_trade_decision(
 
     from app.signals.backtest_verdict import interpret_backtest
 
+    stats = backtest_stats or {}
+    rolling = stats.get("note") == "rolling_backtest"
+    roll_trades = int(stats.get("trade_count") or 0)
+
     bt = interpret_backtest(backtest_stats)
     bt_verdict = bt.get("backtest_verdict", "NO_DATA")
     if bt_verdict == "NOT_PROFITABLE":
-        return {
-            **base,
-            "trade_decision": "NO_TRADE",
-            "decision_reason": bt.get("backtest_summary", "Backtest not profitable"),
-            "strategy_fit": "backtest failed",
-            "prediction": "Skip — backtest not profitable",
-        }
-    if bt_verdict == "NO_DATA":
-        confidence = max(0, confidence - 12)
-        base["take_confidence"] = confidence
-        if confidence < min_conf:
+        if rolling and roll_trades < 15:
+            confidence = max(0, confidence - 8)
+            base["take_confidence"] = confidence
+            bt_verdict = "MARGINAL"
+        else:
             return {
                 **base,
                 "trade_decision": "NO_TRADE",
-                "decision_reason": (
-                    "No backtest proof this setup is profitable — skip until backtest runs"
-                ),
-                "strategy_fit": "no backtest data",
-                "prediction": "Skip — no backtest data",
+                "decision_reason": bt.get("backtest_summary", "Backtest not profitable"),
+                "strategy_fit": "backtest failed",
+                "prediction": "Skip — backtest not profitable",
             }
+    if bt_verdict == "NO_DATA":
+        confidence = max(0, confidence - 6)
+        base["take_confidence"] = confidence
     elif bt_verdict == "MARGINAL" and confidence < min_conf + 8:
         return {
             **base,
@@ -265,7 +265,13 @@ def evaluate_trade_decision(
         }
 
     size_mod = 1.0
-    if regime.regime == Regime.VOLATILE:
+    if regime.regime == Regime.RANGING:
+        size_mod = 0.5
+        reason = (
+            f"Ranging day — TAKE with half size. Confidence {confidence}%, R:R {rr:.1f}"
+        )
+        prediction = f"Can take (cautious) — {confidence}% · ranging scalp"
+    elif regime.regime == Regime.VOLATILE:
         size_mod = 0.5
         reason = (
             f"Volatile — TAKE with half size. Confidence {confidence}%, R:R {rr:.1f}"

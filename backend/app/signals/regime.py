@@ -89,9 +89,9 @@ def detect_regime(df: pd.DataFrame, iv_percentile: float = 50.0) -> RegimeSnapsh
     elif adx_val >= 25:
         regime = Regime.TRENDING
         summary = f"Trending (ADX {adx_val:.0f}) — FVG retest + ORB favoured"
-    elif adx_val < 20:
+    elif adx_val < 14:
         regime = Regime.RANGING
-        summary = f"Ranging/choppy (ADX {adx_val:.0f}) — sit out option buys, theta wins"
+        summary = f"Ranging/choppy (ADX {adx_val:.0f}) — liquidity sweep only, reduced size"
     else:
         regime = Regime.VOLATILE
         summary = f"Transitional (ADX {adx_val:.0f}) — news + FVG A+ only"

@@ -48,7 +48,7 @@ class Settings(BaseSettings):
 
     # Scalping — quick in/out on 5m bars (~30 min hold)
     scalp_holding_bars: int = 6  # 6 x 5m = 30 min scalp window
-    scalp_min_confidence: int = 70  # fewer, higher-quality TAKE signals
+    scalp_min_confidence: int = 65  # quality TAKE without blocking whole choppy days
     max_take_signals_per_day: int = 15  # scalp cap — not 70+ spam
     signal_cooldown_minutes: int = 30  # same setup+instrument gap
     persist_take_signals_only: bool = True  # stop logging every NO_TRADE bar

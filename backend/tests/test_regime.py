@@ -35,7 +35,9 @@ def test_ranging_regime_sit_out():
     result = SetupResult(setup_name="orb_breakout", fired=False, reason="no trigger")
     decision = evaluate_trade_decision("orb_breakout", result, snap, 50)
     if snap.regime == Regime.RANGING:
-        assert decision["trade_decision"] == "SIT_OUT"
+        assert decision["trade_decision"] == "NO_TRADE"
+    else:
+        assert decision["trade_decision"] in ("NO_TRADE", "SIT_OUT")
 
 
 def test_take_on_trending_fvg_setup():
@@ -77,7 +79,8 @@ def test_no_trade_wrong_regime():
         targets=[24600],
     )
     decision = evaluate_trade_decision("fvg_retest", result, snap, 50)
-    assert decision["trade_decision"] == "SIT_OUT"
+    assert decision["trade_decision"] == "NO_TRADE"
+    assert "ranging" in decision["decision_reason"].lower() or "not suitable" in decision["decision_reason"].lower()
 
 
 def test_no_trade_high_iv():

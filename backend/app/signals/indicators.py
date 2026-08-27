@@ -30,6 +30,12 @@ def atr(df: pd.DataFrame, length: int = 14) -> pd.Series:
 
 def vwap(df: pd.DataFrame) -> pd.Series:
     d = ensure_ohlcv(df)
+    if "timestamp" in d.columns:
+        idx = pd.DatetimeIndex(pd.to_datetime(d["timestamp"], utc=True))
+        d = d.set_index(idx)
+    elif not isinstance(d.index, pd.DatetimeIndex):
+        d = d.copy()
+        d.index = pd.date_range(end=pd.Timestamp.utcnow(), periods=len(d), freq="5min")
     return ta.vwap(d["high"], d["low"], d["close"], d["volume"])
 
 
