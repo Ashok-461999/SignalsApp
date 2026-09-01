@@ -7,7 +7,7 @@ class AppConfig {
   static String get apiBaseUrl {
     if (_envBaseUrl.isNotEmpty) return _envBaseUrl;
     // AWS EC2 Mumbai — My Indian Market (t3.micro ap-south-1)
-    if (Platform.isAndroid) return 'http://13.233.102.43:8000';
+    if (Platform.isAndroid) return 'http://13.233.102.43';
     return 'http://localhost:8000';
   }
 
