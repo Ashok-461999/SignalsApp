@@ -1224,7 +1224,9 @@ class _AlphaSignalCard extends StatelessWidget {
     final formatted = signal['formatted']?.toString();
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: GlassCard(
+      child: AlphaSurface(
+        padding: const EdgeInsets.all(12),
+        accent: _tierColor,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
