@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    alpha,
     backtest,
     candles,
     crypto,
@@ -106,6 +107,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(health.router)
     app.include_router(monitoring.router)
+    app.include_router(alpha.router)
     app.include_router(candles.router)
     app.include_router(gaps.router)
     app.include_router(live_candles.router)

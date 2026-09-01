@@ -161,6 +161,14 @@ final regimesProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   }
 });
 
+final alphaSignalsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  try {
+    return await ref.watch(apiServiceProvider).getAlphaSignals();
+  } catch (_) {
+    return {'count': 0, 'signals': <dynamic>[]};
+  }
+});
+
 final activeSignalsProvider = StreamProvider<List<SignalModel>>((ref) async* {
   final api = ref.read(apiServiceProvider);
   final ws = ref.watch(signalWsProvider);

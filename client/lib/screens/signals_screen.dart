@@ -36,6 +36,7 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
   Widget build(BuildContext context) {
     final health = ref.watch(healthProvider);
     final signals = ref.watch(activeSignalsProvider);
+    final alphaSignals = ref.watch(alphaSignalsProvider);
     final history = ref.watch(signalHistoryProvider);
     final regimes = ref.watch(regimesProvider);
     final predictions = ref.watch(predictionBySymbolProvider);
@@ -107,6 +108,7 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
                   onPressed: () {
                     ref.invalidate(activeSignalsProvider);
                     ref.invalidate(signalHistoryProvider);
+                    ref.invalidate(alphaSignalsProvider);
                   },
                 ),
                 IconButton(
@@ -115,6 +117,32 @@ class _SignalsScreenState extends ConsumerState<SignalsScreen> {
                 ),
               ],
             ),
+          ),
+        ),
+        SliverToBoxAdapter(
+          child: alphaSignals.when(
+            data: (data) {
+              final list = (data['signals'] as List<dynamic>? ?? [])
+                  .map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList();
+              if (list.isEmpty) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Alpha Engine (${data['count'] ?? list.length})',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    ),
+                    const SizedBox(height: 8),
+                    ...list.take(3).map((sig) => _AlphaSignalCard(signal: sig)),
+                  ],
+                ),
+              );
+            },
+            loading: () => const SizedBox.shrink(),
+            error: (_, __) => const SizedBox.shrink(),
           ),
         ),
         SliverToBoxAdapter(
@@ -1173,6 +1201,95 @@ class _SignalsEmptyState extends StatelessWidget {
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Refresh signals'),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AlphaSignalCard extends StatelessWidget {
+  const _AlphaSignalCard({required this.signal});
+
+  final Map<String, dynamic> signal;
+
+  Color get _tierColor => switch (signal['tier']?.toString()) {
+        'A+' => AppColors.profit,
+        'A' => AppColors.accent,
+        _ => AppColors.warn,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    final formatted = signal['formatted']?.toString();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GlassCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _tierColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: _tierColor.withValues(alpha: 0.4)),
+                  ),
+                  child: Text(
+                    '${signal['tier']} · ${signal['confluence_score']}/100',
+                    style: TextStyle(color: _tierColor, fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${signal['instrument']} ${signal['strategy']}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              signal['entry_zone']?.toString() ?? '',
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Risk ₹${signal['risk_inr']} · ${signal['lots']} lot(s) · SL: ${signal['sl_rule']}',
+              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+            ),
+            if (formatted != null && formatted.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () {
+                  showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: AppColors.surface,
+                    builder: (_) => DraggableScrollableSheet(
+                      expand: false,
+                      initialChildSize: 0.75,
+                      builder: (_, controller) => Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: ListView(
+                          controller: controller,
+                          children: [
+                            const Text('Alpha Signal', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                            const SizedBox(height: 12),
+                            SelectableText(formatted, style: const TextStyle(fontSize: 12, height: 1.4)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.article_outlined, size: 16),
+                label: const Text('Full signal card'),
+              ),
+            ],
           ],
         ),
       ),

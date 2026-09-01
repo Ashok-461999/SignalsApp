@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # Live feed & scheduler
     enable_live_feed: bool = True
     enable_scheduler: bool = True
+    enable_alpha_engine: bool = True
+    alpha_scan_minutes: int = 5
     backfill_days: int = 5
     session_refresh_hours: int = 6
     gap_backfill_hours: int = 12
@@ -49,7 +51,7 @@ class Settings(BaseSettings):
     # Scalping — quick in/out on 5m bars (~30 min hold)
     scalp_holding_bars: int = 6  # 6 x 5m = 30 min scalp window
     scalp_min_confidence: int = 65  # quality TAKE without blocking whole choppy days
-    max_take_signals_per_day: int = 15  # scalp cap — not 70+ spam
+    max_take_signals_per_day: int = 10  # alpha engine daily cap
     signal_cooldown_minutes: int = 30  # same setup+instrument gap
     persist_take_signals_only: bool = True  # stop logging every NO_TRADE bar
 

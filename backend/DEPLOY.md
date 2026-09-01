@@ -1,6 +1,6 @@
-# SignalApp — Oracle Cloud ARM Deployment Guide
+# SignalApp — AWS EC2 Deployment Guide
 
-Deploy the SignalApp backend on an **Oracle Cloud always-free ARM VM** (Ubuntu 22.04).
+Deploy the SignalApp backend on **AWS EC2** (Ubuntu 22.04 LTS).
 
 **Stack:** FastAPI + SQLite (WAL mode) + in-memory live cache + SmartAPI WebSocket worker. No PostgreSQL, no Redis.
 
@@ -8,73 +8,35 @@ Deploy the SignalApp backend on an **Oracle Cloud always-free ARM VM** (Ubuntu 2
 
 ## Prerequisites
 
-- Oracle Cloud account with an **Ampere A1** VM (1–4 OCPU, 6–24 GB RAM recommended)
-- Ubuntu 22.04 ARM64 image
-- SSH key pair
-- [DuckDNS](https://www.duckdns.org/) account (free subdomain for HTTPS)
+- AWS account
+- EC2 instance: **t3.small** or larger (2 vCPU, 2+ GB RAM recommended)
+- Ubuntu 22.04 LTS AMI
+- Security group with inbound: **22** (SSH), **80** (HTTP), **443** (HTTPS), **8000** (API direct, optional)
+- Elastic IP (recommended — keeps a stable public IP)
+- Domain name pointed to your Elastic IP (optional, for HTTPS via Caddy)
 - Angel One SmartAPI credentials
 
 ---
 
-## 1. Create the Oracle VM
+## 1. Launch EC2 instance
 
-1. Oracle Cloud Console → **Compute** → **Instances** → **Create Instance**
-2. Image: **Canonical Ubuntu 22.04** (aarch64)
-3. Shape: **VM.Standard.A1.Flex** — 2 OCPU, 12 GB RAM is a good starting point
-4. Networking: assign a **public IP**
-5. Download your SSH private key
+1. AWS Console → **EC2** → **Launch instance**
+2. AMI: **Ubuntu Server 22.04 LTS**
+3. Instance type: **t3.small** (or t3.medium for heavier load)
+4. Key pair: create/download `.pem` for SSH
+5. Security group: allow ports 22, 80, 443, 8000 from your IP or `0.0.0.0/0` (restrict SSH to your IP)
+6. Storage: 20–30 GB gp3
+7. Allocate and associate an **Elastic IP**
 
 SSH in:
 
 ```bash
-ssh -i ~/.ssh/your_key ubuntu@<VM_PUBLIC_IP>
+ssh -i ~/.ssh/your-key.pem ubuntu@<ELASTIC_IP>
 ```
 
 ---
 
-## 2. Open ports (both layers required)
-
-Oracle blocks traffic at **two** levels. Missing either layer = connection refused.
-
-### Layer A — OCI Security List (cloud firewall)
-
-1. Networking → Virtual Cloud Networks → your VCN → **Security Lists**
-2. Edit **Ingress Rules**, add:
-
-| Source CIDR | Protocol | Dest Port | Description |
-|-------------|----------|-----------|-------------|
-| `0.0.0.0/0` | TCP | 22 | SSH |
-| `0.0.0.0/0` | TCP | 80 | HTTP (Caddy) |
-| `0.0.0.0/0` | TCP | 443 | HTTPS (Caddy) |
-| `0.0.0.0/0` | TCP | 8000 | API direct (optional) |
-
-### Layer B — VM iptables (Oracle Ubuntu default)
-
-Oracle's Ubuntu image ships with `iptables` rules that block inbound traffic even after the security list is open. Run:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y iptables-persistent
-
-# Allow inbound on required ports
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 22 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
-sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 8000 -j ACCEPT
-
-# Persist across reboots
-sudo netfilter-persistent save
-```
-
-Verify:
-
-```bash
-sudo iptables -L INPUT -n --line-numbers | head -20
-```
-
----
-
-## 3. Install Docker on Ubuntu 22.04 ARM
+## 2. Install Docker
 
 ```bash
 sudo apt-get update
@@ -96,44 +58,18 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-Verify ARM Docker:
-
-```bash
-docker run --rm python:3.11-slim-bookworm uname -m
-# Expected: aarch64
-```
-
 ---
 
-## 4. DuckDNS setup
-
-1. Go to [duckdns.org](https://www.duckdns.org/), sign in
-2. Create a subdomain, e.g. `signalapp` → `signalapp.duckdns.org`
-3. Set the IP to your VM's **public IP**
-4. Note your DuckDNS token (for auto-update cron, optional):
+## 3. Deploy the application
 
 ```bash
-# Optional: auto-update DuckDNS IP on reboot
-echo '0 */6 * * * curl -s "https://www.duckdns.org/update?domains=signalapp&token=YOUR_TOKEN&ip=" >> /var/log/duckdns.log 2>&1' | crontab -
-```
-
-5. Edit `Caddyfile` — replace `signalapp.duckdns.org` with your subdomain
-
----
-
-## 5. Deploy the application
-
-```bash
-# Create persistent data directory
 sudo mkdir -p /opt/signalapp/data /opt/signalapp/backups /opt/signalapp/logs
 sudo chown -R $USER:$USER /opt/signalapp
 
-# Clone repo
 cd /opt/signalapp
-git clone <your-repo-url> repo
+git clone https://github.com/Ashok-461999/SignalsApp.git repo
 cd repo/backend
 
-# Configure environment
 cp .env.example .env
 nano .env   # fill SmartAPI credentials
 ```
@@ -157,7 +93,7 @@ Build and start:
 # API only (port 8000)
 docker compose up -d api
 
-# With HTTPS via Caddy (ports 80 + 443)
+# With HTTPS via Caddy (ports 80 + 443) — set your domain in Caddyfile first
 docker compose --profile https up -d
 ```
 
@@ -167,164 +103,73 @@ Verify:
 curl http://localhost:8000/health | python3 -m json.tool
 ```
 
-Check live feed status in the response:
+---
 
-```json
-{
-  "live_feed": { "running": true, "connected": true },
-  "database": { "engine": "sqlite", "wal_mode": true },
-  "trading": { "paper_trading": true, "execution_allowed": false }
-}
+## 4. HTTPS with Caddy (optional)
+
+1. Point your domain A record to the Elastic IP
+2. Edit `Caddyfile` — replace `api.yourdomain.com` with your domain
+3. `docker compose --profile https up -d`
+
+Caddy obtains Let's Encrypt TLS automatically.
+
+---
+
+## 5. Flutter APK — point to AWS
+
+Build the release APK with your AWS API URL:
+
+```bash
+cd client
+flutter build apk --release \
+  --dart-define=API_BASE_URL=https://api.yourdomain.com
+```
+
+For HTTP testing only (not recommended for production):
+
+```bash
+flutter build apk --release \
+  --dart-define=API_BASE_URL=http://<ELASTIC_IP>:8000
+```
+
+Also add your domain or IP to `client/android/app/src/main/res/xml/network_security_config.xml` if using HTTP.
+
+---
+
+## 6. SQLite backup (cron)
+
+```bash
+chmod +x scripts/backup_sqlite.sh
+
+(crontab -l 2>/dev/null; echo "0 2 * * * SQLITE_PATH=/opt/signalapp/data/signalapp.db BACKUP_DIR=/opt/signalapp/backups /opt/signalapp/repo/backend/scripts/backup_sqlite.sh >> /var/log/signalapp-backup.log 2>&1") | crontab -
 ```
 
 ---
 
-## 6. SQLite WAL mode
-
-The WebSocket worker writes completed candles while the API reads concurrently. Default SQLite journal mode causes `database is locked` errors under this pattern.
-
-The app sets on every connection:
-
-```sql
-PRAGMA journal_mode=WAL;
-PRAGMA synchronous=NORMAL;
-PRAGMA busy_timeout=5000;
-```
-
-WAL allows one writer + multiple readers simultaneously. Do not disable this.
-
----
-
-## 7. Nightly SQLite backup
+## 7. Useful commands
 
 ```bash
-sudo cp scripts/backup_sqlite.sh /opt/signalapp/backup_sqlite.sh
-sudo chmod +x /opt/signalapp/backup_sqlite.sh
+# Restart after code or .env change
+cd /opt/signalapp/repo && git pull && cd backend && docker compose up -d --build api
 
-# Edit backup script env if needed
-export SQLITE_PATH=/opt/signalapp/data/signalapp.db
-export BACKUP_DIR=/opt/signalapp/backups
-# export BACKUP_REMOTE=user@backup-host:/backups/signalapp/
-
-# Cron: daily at 2 AM IST (adjust timezone as needed)
-(crontab -l 2>/dev/null; echo "0 2 * * * SQLITE_PATH=/opt/signalapp/data/signalapp.db BACKUP_DIR=/opt/signalapp/backups /opt/signalapp/backup_sqlite.sh >> /var/log/signalapp-backup.log 2>&1") | crontab -
-```
-
-Manual backup:
-
-```bash
-SQLITE_PATH=/opt/signalapp/data/signalapp.db /opt/signalapp/backup_sqlite.sh
-```
-
----
-
-## 8. SmartAPI WebSocket persistence
-
-The backend runs as a **single long-lived process** (`restart: unless-stopped`):
-
-- SmartAPI WebSocket connects on startup (market hours)
-- Session auto-refreshes every 6 hours via refresh token + TOTP fallback
-- WebSocket reconnects automatically on disconnect
-- Scheduler runs gap backfill every 12 hours
-
-Monitor during market hours:
-
-```bash
-# Feed status
-curl -s http://localhost:8000/health | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['live_feed'])"
-
-# Container logs
+# Logs
 docker logs -f signalapp-api --tail 100
-```
 
-Expected log lines:
-
-```
-SmartAPI session established for <client_code>
-Live feed service started
-SmartAPI WebSocket connected, subscribing to indices
-Scheduled SmartAPI session refresh completed
-```
-
-If the feed disconnects, it auto-reconnects within ~10 seconds. Session refresh runs before token expiry (8h session, 6h refresh interval).
-
----
-
-## 9. Trading safety gates
-
-| Flag | Default | Effect |
-|------|---------|--------|
-| `PAPER_TRADING` | `true` | No real orders placed |
-| `LIVE_EXECUTION_ENABLED` | `false` | Must be `true` for live orders |
-| `KILL_SWITCH` | `false` | Set `true` to halt all execution immediately |
-| `RISK_PERCENT` | `1.0` | Max risk per trade (backend sizing) |
-
-Live execution requires **all three**: `PAPER_TRADING=false`, `LIVE_EXECUTION_ENABLED=true`, `KILL_SWITCH=false`.
-
-Check at runtime: `GET /health` → `trading.execution_allowed`
-
----
-
-## 10. ARM64 package compatibility
-
-| Package | ARM64 wheel | Notes |
-|---------|-------------|-------|
-| fastapi, uvicorn, sqlalchemy | Yes | Pure Python / wheels |
-| aiosqlite | Yes | SQLite async driver |
-| numpy, pandas, scipy | Yes | Pre-built aarch64 wheels |
-| pandas-ta | Yes | Pure Python |
-| smartapi-python | Yes | Pure Python + websocket-client |
-| vectorbt | Partial | Commented out in requirements.txt; may need `build-essential` if enabled |
-
-Dockerfile installs `build-essential gcc g++` as fallback for any source builds.
-
----
-
-## 11. Memory footprint
-
-Target: **< 2 GB RSS** on a 6–12 GB VM.
-
-- Single uvicorn worker (`--workers 1`) — required for in-memory cache + WebSocket
-- SQLite page cache capped at ~8 MB
-- Live candle ring buffer capped at 500 events
-- Do not run multiple API replicas on this single-VM build
-
-Monitor:
-
-```bash
-docker stats signalapp-api
+# Health
+curl -s http://localhost:8000/health | python3 -m json.tool
 ```
 
 ---
 
-## 12. Useful commands
-
-```bash
-# Restart after .env change
-docker compose up -d --build api
-
-# Sync all historical candles
-docker exec signalapp-api python -m scripts.sync_candles sync-all --days 5
-
-# Gap backfill
-docker exec signalapp-api python -m scripts.sync_candles backfill --days 5
-
-# View live WebSocket (from another machine)
-wscat -c ws://signalapp.duckdns.org/live-candles
-```
-
----
-
-## 13. Troubleshooting
+## 8. Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| Connection refused on 80/443 | Check OCI Security List **and** iptables (Section 2) |
-| `database is locked` | Confirm WAL mode in `/health` response; only run 1 worker |
-| SmartAPI login failed | Verify TOTP secret, trading password, API key in `.env` |
-| WebSocket not connected | Check market hours; review `docker logs signalapp-api` |
-| Caddy TLS failed | Confirm DuckDNS points to VM IP; port 80 must be open for ACME |
-| Container won't start | `docker logs signalapp-api`; check `/opt/signalapp/data` permissions |
+| Connection refused | Check EC2 security group inbound rules |
+| SmartAPI login failed | Verify TOTP secret, password, API key in `.env` |
+| WebSocket not connected | Market hours only; check `docker logs signalapp-api` |
+| Caddy TLS failed | Domain must point to Elastic IP; port 80 open for ACME |
+| `database is locked` | Only run 1 uvicorn worker; confirm WAL in `/health` |
 
 ---
 
@@ -332,9 +177,8 @@ wscat -c ws://signalapp.duckdns.org/live-candles
 
 | File | Purpose |
 |------|---------|
-| `Dockerfile` | ARM64 Python 3.11 image |
-| `docker-compose.yml` | API + optional Caddy, persistent `/opt/signalapp/data` bind mount |
-| `Caddyfile` | DuckDNS HTTPS reverse proxy |
-| `.env.example` | All configuration variables |
-| `requirements.txt` | Python deps with ARM64 notes |
-| `scripts/backup_sqlite.sh` | Nightly DB backup cron job |
+| `Dockerfile` | Python 3.12 API image |
+| `docker-compose.yml` | API + optional Caddy |
+| `Caddyfile` | HTTPS reverse proxy |
+| `.env.example` | Configuration template |
+| `scripts/backup_sqlite.sh` | Nightly DB backup |

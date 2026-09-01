@@ -14,14 +14,21 @@ uvicorn app.main:app --reload --port 8000
 
 SQLite DB is created at `./data/signalapp.db` with WAL mode enabled.
 
-## Production deployment (Oracle Cloud ARM)
+## Production deployment (AWS EC2)
 
-See **[backend/DEPLOY.md](backend/DEPLOY.md)** for the full Oracle Cloud Ubuntu 22.04 ARM guide:
-- Docker + docker-compose on aarch64
-- OCI Security List + iptables port rules
-- DuckDNS + Caddy HTTPS
+See **[backend/DEPLOY.md](backend/DEPLOY.md)** for the AWS EC2 Ubuntu guide:
+- Docker + docker-compose on EC2
+- Security group + Elastic IP
+- Caddy HTTPS (optional)
 - SQLite backup cron
 - SmartAPI WebSocket persistence through market hours
+
+Build production APK with your API URL:
+
+```bash
+cd client
+flutter build apk --release --dart-define=API_BASE_URL=https://api.yourdomain.com
+```
 
 ## API quick reference
 

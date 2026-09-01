@@ -161,6 +161,26 @@ class ApiService {
     final r = await _dio.patch<Map<String, dynamic>>('/settings/trading', data: data);
     return r.data!;
   }
+
+  Future<Map<String, dynamic>> getAlphaSignals() async {
+    final r = await _dio.get<Map<String, dynamic>>('/alpha/signals');
+    return r.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> triggerAlphaScan() async {
+    final r = await _dio.post<Map<String, dynamic>>('/alpha/scan');
+    return r.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getAlphaPrepReport() async {
+    final r = await _dio.get<Map<String, dynamic>>('/alpha/prep');
+    return r.data ?? {};
+  }
+
+  Future<Map<String, dynamic>> getAlphaStatus() async {
+    final r = await _dio.get<Map<String, dynamic>>('/alpha/status');
+    return r.data ?? {};
+  }
 }
 
 class SignalWebSocket {

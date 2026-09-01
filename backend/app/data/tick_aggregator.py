@@ -178,5 +178,14 @@ class TickAggregator:
             except Exception:
                 logger.exception("Signal scanner failed after bar close")
 
+            try:
+                from app.alpha.scanner import alpha_scanner
+                from app.config import get_settings
+
+                if get_settings().enable_alpha_engine:
+                    alpha_scanner.on_bar_close(candle.instrument, candle.interval)
+            except Exception:
+                logger.exception("Alpha scanner failed after bar close")
+
 
 tick_aggregator = TickAggregator()

@@ -199,6 +199,19 @@ def fetch_gift_nifty_live() -> dict | None:
     return None
 
 
+def get_gift_nifty_snapshot() -> dict | None:
+    """Lightweight GIFT Nifty snapshot for alpha prep reports."""
+    live = fetch_gift_nifty_live()
+    if not live:
+        return None
+    return {
+        "price": live.get("last_price"),
+        "change_pct": live.get("change_pct"),
+        "change_points": live.get("change_points"),
+        "available": True,
+    }
+
+
 def backtest_nifty_open_gaps(session: Session, lookback_days: int = 180) -> dict:
     """Measure how often Nifty 50 opens negative vs previous close (from stored 5m candles)."""
     stmt = (

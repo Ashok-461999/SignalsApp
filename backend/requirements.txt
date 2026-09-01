@@ -22,8 +22,7 @@ scipy==1.15.2
 # vectorbt is optional — heavy; uncomment when backtest service is built:
 # vectorbt==0.26.2
 
-# ARM64 notes (Oracle Cloud Ubuntu 22.04):
-# - numpy, pandas, scipy, aiosqlite: binary wheels available for aarch64
+# Linux VM notes (AWS EC2 Ubuntu):
+# - numpy, pandas, scipy, aiosqlite: binary wheels available for x86_64/aarch64
 # - pandas-ta: pure Python, no compile needed
 # - vectorbt/numba: may need build-essential if wheel unavailable
-#   apt-get install -y build-essential gcc g++ python3-dev

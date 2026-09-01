@@ -127,6 +127,27 @@ class SmartAPIClient:
 
         return response.get("data") or []
 
+    def market_quote(self, exchange_tokens: dict[str, list[str]], mode: str = "FULL") -> list[dict]:
+        """Fetch live quotes with OI for option tokens. exchange_tokens e.g. {'NFO': ['12345']}."""
+        obj = self._ensure_session()
+        smartapi_rate_limiter.acquire()
+        response = obj.marketQuote(mode, exchange_tokens)
+        if not response or not response.get("status"):
+            message = response.get("message", "Unknown error") if response else "No response"
+            raise RuntimeError(f"marketQuote failed: {message}")
+        data = response.get("data") or {}
+        fetched = data.get("fetched") or []
+        return fetched if isinstance(fetched, list) else []
+
+    def option_greek(self, name: str, expiry_date: str) -> list[dict]:
+        """Angel optionGreek API — expiry e.g. 28MAR2024."""
+        obj = self._ensure_session()
+        smartapi_rate_limiter.acquire()
+        response = obj.optionGreek({"name": name, "expirydate": expiry_date})
+        if not response or not response.get("status"):
+            return []
+        return response.get("data") or []
+
     def health_check(self) -> dict[str, Any]:
         if not self._settings.smartapi_configured:
             return {"configured": False, "connected": False, "message": "Credentials not set"}

@@ -6,8 +6,8 @@ class AppConfig {
 
   static String get apiBaseUrl {
     if (_envBaseUrl.isNotEmpty) return _envBaseUrl;
-    // Production Oracle VM — used when APK built without dart-define
-    if (Platform.isAndroid) return 'http://140.245.247.55:8000';
+    // AWS EC2 Mumbai — My Indian Market (t3.micro ap-south-1)
+    if (Platform.isAndroid) return 'http://3.110.188.229:8000';
     return 'http://localhost:8000';
   }
 

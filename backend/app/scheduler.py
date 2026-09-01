@@ -94,6 +94,19 @@ def _run_setup_backtests() -> None:
     threading.Thread(target=_backtest_worker, name="setup-backtests", daemon=True).start()
 
 
+def _alpha_scan_worker() -> None:
+    try:
+        from app.alpha.scanner import alpha_scanner
+
+        alpha_scanner.scan()
+    except Exception:
+        logger.exception("Alpha scan job failed")
+
+
+def _run_alpha_scan() -> None:
+    threading.Thread(target=_alpha_scan_worker, name="alpha-scan", daemon=True).start()
+
+
 def start_scheduler() -> BackgroundScheduler | None:
     global _scheduler
     settings = get_settings()
@@ -129,6 +142,16 @@ def start_scheduler() -> BackgroundScheduler | None:
         coalesce=True,
         misfire_grace_time=3600,
     )
+    if settings.enable_alpha_engine:
+        _scheduler.add_job(
+            _run_alpha_scan,
+            IntervalTrigger(minutes=settings.alpha_scan_minutes),
+            id="alpha_scan",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            misfire_grace_time=120,
+        )
     _scheduler.start()
     logger.info("Background scheduler started")
     return _scheduler
