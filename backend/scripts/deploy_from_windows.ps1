@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $Key = "$env:USERPROFILE\.ssh\scalptrack.pem"
-$Host = "ubuntu@3.110.188.229"
+$Host = "ubuntu@13.233.102.43"
 $Repo = "/opt/signalapp/repo"
 
 if (-not (Test-Path $Key)) {
@@ -31,4 +31,4 @@ cd $Repo && git pull --ff-only
 cd backend && bash scripts/deploy_aws.sh
 "@
 
-Write-Host "Done. API: http://3.110.188.229:8000/health"
+Write-Host "Done. API: http://13.233.102.43:8000/health"
