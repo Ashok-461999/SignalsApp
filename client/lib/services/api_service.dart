@@ -15,8 +15,8 @@ class ApiService {
   static Dio _createDio() {
     final dio = Dio(BaseOptions(
       baseUrl: AppConfig.apiBaseUrl,
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 30),
+      connectTimeout: const Duration(seconds: 6),
+      receiveTimeout: const Duration(seconds: 12),
     ));
     dio.interceptors.add(InterceptorsWrapper(
       onError: (error, handler) async {
@@ -25,7 +25,7 @@ class ApiService {
         final retriable = error.type == DioExceptionType.connectionTimeout ||
             error.type == DioExceptionType.receiveTimeout ||
             error.type == DioExceptionType.connectionError;
-        if (retryCount < 2 && retriable) {
+        if (retryCount < 1 && retriable) {
           opts.extra['retryCount'] = retryCount + 1;
           await Future<void>.delayed(Duration(milliseconds: 350 * (retryCount + 1)));
           try {

@@ -4,10 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'providers/app_providers.dart';
+import 'screens/alpha_screen.dart';
 import 'screens/news_intel_screen.dart';
 import 'screens/journal_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/signals_screen.dart';
 import 'screens/watchlist_screen.dart';
 import 'services/notification_service.dart';
 import 'theme/app_branding.dart';
@@ -60,7 +60,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   final _screens = const [
     WatchlistScreen(),
     NewsIntelScreen(),
-    SignalsScreen(),
+    AlphaScreen(),
     JournalScreen(),
     SettingsScreen(),
   ];
@@ -118,7 +118,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                   NavigationDestination(
                     icon: Icon(Icons.bolt_outlined),
                     selectedIcon: Icon(Icons.bolt_rounded),
-                    label: 'Signals',
+                    label: 'Alpha',
                   ),
                   NavigationDestination(
                     icon: Icon(Icons.wallet_outlined),

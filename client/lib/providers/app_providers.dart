@@ -99,17 +99,32 @@ const defaultTradingSettings = <String, dynamic>{
   'trading_style': 'hybrid',
 };
 
-final healthProvider = FutureProvider((ref) => ref.watch(apiServiceProvider).getHealth());
+final healthProvider = FutureProvider((ref) async {
+  return ref.watch(apiServiceProvider).getHealth().timeout(const Duration(seconds: 10));
+});
 
-/// Periodically refresh server status so UI recovers after backend restarts.
-final healthRefreshProvider = Provider<void>((ref) {
-  if (kDebugMode && const bool.fromEnvironment('FLUTTER_TEST')) {
-    return;
+final alphaPrepProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  try {
+    return await ref.watch(apiServiceProvider).getAlphaPrepReport().timeout(const Duration(seconds: 12));
+  } catch (_) {
+    return {};
   }
-  final timer = Timer.periodic(const Duration(seconds: 30), (_) {
-    ref.invalidate(healthProvider);
-  });
-  ref.onDispose(timer.cancel);
+});
+
+final alphaStatusProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  try {
+    return await ref.watch(apiServiceProvider).getAlphaStatus().timeout(const Duration(seconds: 10));
+  } catch (_) {
+    return {};
+  }
+});
+
+final alphaSignalsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+  try {
+    return await ref.watch(apiServiceProvider).getAlphaSignals().timeout(const Duration(seconds: 12));
+  } catch (_) {
+    return {'count': 0, 'signals': <dynamic>[]};
+  }
 });
 
 final tradingSettingsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
@@ -161,12 +176,16 @@ final regimesProvider = FutureProvider<Map<String, dynamic>>((ref) async {
   }
 });
 
-final alphaSignalsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
-  try {
-    return await ref.watch(apiServiceProvider).getAlphaSignals();
-  } catch (_) {
-    return {'count': 0, 'signals': <dynamic>[]};
+/// Periodically refresh server status so UI recovers after backend restarts.
+final healthRefreshProvider = Provider<void>((ref) {
+  if (kDebugMode && const bool.fromEnvironment('FLUTTER_TEST')) {
+    return;
   }
+  final timer = Timer.periodic(const Duration(seconds: 30), (_) {
+    ref.invalidate(healthProvider);
+    ref.invalidate(alphaSignalsProvider);
+  });
+  ref.onDispose(timer.cancel);
 });
 
 final activeSignalsProvider = StreamProvider<List<SignalModel>>((ref) async* {
@@ -186,14 +205,10 @@ final activeSignalsProvider = StreamProvider<List<SignalModel>>((ref) async* {
   }
 
   try {
-    await loadFromRest();
+    await loadFromRest().timeout(const Duration(seconds: 12));
     yield cache.values.toList();
   } catch (e) {
-    if (cache.isNotEmpty) {
-      yield cache.values.toList();
-    } else {
-      rethrow;
-    }
+    yield cache.values.toList();
   }
 
   yield* Stream<List<SignalModel>>.multi((controller) {
