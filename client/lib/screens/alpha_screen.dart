@@ -253,6 +253,8 @@ class _PrepSection extends StatelessWidget {
         final indices = p['indices'] as Map<String, dynamic>? ?? {};
         final options = p['options_map'] as Map<String, dynamic>? ?? {};
         final watch = p['watchlist'] as List<dynamic>? ?? [];
+        final news = p['news_digest'] as List<dynamic>? ?? [];
+        final sectors = p['sector_heatmap'] as List<dynamic>? ?? [];
         return Padding(
           padding: const EdgeInsets.all(16),
           child: AlphaSurface(
@@ -267,6 +269,28 @@ class _PrepSection extends StatelessWidget {
                   style: const TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.4),
                 ),
                 const SizedBox(height: 12),
+                if (news.isNotEmpty) ...[
+                  const Text('Top News', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                  ...news.take(3).map((n) {
+                    final m = Map<String, dynamic>.from(n as Map);
+                    return Text(
+                      '• ${m['headline']} (${m['sentiment']})',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                ],
+                if (sectors.isNotEmpty) ...[
+                  const Text('Sector Heat', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                  ...sectors.map((s) {
+                    final m = Map<String, dynamic>.from(s as Map);
+                    return Text(
+                      '${m['sector']}: ${m['trend']} · ${m['oi_flow']} · ${m['preferred']}',
+                      style: const TextStyle(fontSize: 11),
+                    );
+                  }),
+                  const SizedBox(height: 8),
+                ],
                 ...indices.entries.map((e) {
                   final d = Map<String, dynamic>.from(e.value as Map);
                   final o = Map<String, dynamic>.from((options[e.key] as Map?) ?? {});

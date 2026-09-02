@@ -2,7 +2,7 @@
 $ErrorActionPreference = "Stop"
 
 $Key = "$env:USERPROFILE\.ssh\scalptrack.pem"
-$Host = "ubuntu@13.235.102.43"
+$Host = "ubuntu@13.233.102.45"
 $Repo = "/opt/signalapp/repo"
 
 if (-not (Test-Path $Key)) {

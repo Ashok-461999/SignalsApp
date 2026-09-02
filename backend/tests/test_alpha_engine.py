@@ -28,7 +28,7 @@ def test_breakeven_buyer():
 
 
 def test_confluence_scoring():
-    result = compute_confluence(20, 15, 15, 15, 15, 10, 10)
+    result = compute_confluence(18, 12, 12, 12, 12, 10, 10, 8, 6)
     assert result.total == 100
     assert result.tier == "A+"
     assert result.can_signal is True
@@ -36,14 +36,14 @@ def test_confluence_scoring():
 
 
 def test_confluence_below_threshold():
-    result = compute_confluence(10, 0, 0, 0, 0, 0, 0)
+    result = compute_confluence(9, 0, 0, 0, 0, 0, 0, 0, 0)
     assert result.can_signal is False
     assert score_to_tier(result.total) == "NO_SIGNAL"
 
 
 def test_pcr_points_contrarian():
-    assert pcr_points(0.5, "bearish") == 15
-    assert pcr_points(1.5, "bullish") == 15
+    assert pcr_points(0.5, "bearish") == 12
+    assert pcr_points(1.5, "bullish") == 12
     assert pcr_points(1.0, "bullish") == 0
 
 

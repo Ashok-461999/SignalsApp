@@ -1,11 +1,11 @@
-"""7-factor confluence scoring — minimum 70 to issue signal."""
+"""9-factor confluence scoring — minimum 70 to issue signal (India Alpha v2)."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
 
-from app.alpha.constants import MIN_CONFLUENCE_SCORE, TIER_LIMITS, TIER_RISK_PCT
+from app.alpha.constants import MIN_CONFLUENCE_SCORE, TIER_RISK_PCT
 
 
 @dataclass
@@ -34,19 +34,23 @@ def compute_confluence(
     ob_fvg_pts: int,
     oi_pts: int,
     pcr_pts: int,
+    news_pts: int,
+    sector_pts: int,
     profile_pts: int,
     gex_pts: int,
 ) -> ConfluenceResult:
     factors = {
-        "structure": structure_pts,
-        "liquidity_sweep": sweep_pts,
-        "order_block_fvg": ob_fvg_pts,
-        "oi_confluence": oi_pts,
-        "pcr_sentiment": pcr_pts,
-        "market_profile": profile_pts,
-        "gex_volatility": gex_pts,
+        "structure": min(structure_pts, 18),
+        "liquidity_sweep": min(sweep_pts, 12),
+        "order_block_fvg": min(ob_fvg_pts, 12),
+        "oi_confluence": min(oi_pts, 12),
+        "pcr_sentiment": min(pcr_pts, 12),
+        "news_sentiment": max(-10, min(news_pts, 10)),
+        "sector_rotation": min(sector_pts, 10),
+        "market_profile": min(profile_pts, 8),
+        "gex_volatility": min(gex_pts, 6),
     }
-    total = sum(factors.values())
+    total = max(0, sum(factors.values()))
     tier = score_to_tier(total)
     emoji = {"A+": "🟢", "A": "🟡", "B": "🟠", "NO_SIGNAL": "⚫"}.get(tier, "⚫")
     return ConfluenceResult(
@@ -63,24 +67,24 @@ def pcr_points(pcr: float, direction: str) -> int:
     from app.alpha.constants import PCR_EXTREME_HIGH, PCR_EXTREME_LOW, PCR_NEUTRAL_HIGH, PCR_NEUTRAL_LOW
 
     if pcr < PCR_EXTREME_LOW and direction == "bearish":
-        return 15
+        return 12
     if pcr > PCR_EXTREME_HIGH and direction == "bullish":
-        return 15
+        return 12
     if pcr < 0.75 and direction == "bullish":
-        return 8
+        return 6
     if pcr > 1.25 and direction == "bearish":
-        return 8
+        return 6
     if PCR_NEUTRAL_LOW <= pcr <= PCR_NEUTRAL_HIGH:
         return 0
-    return 4
+    return 3
 
 
 def gex_points(gex: dict[str, Any], direction: str, breakout: bool) -> int:
     regime = gex.get("regime", "neutral")
     if breakout and regime == "negative":
-        return 10
+        return 6
     if not breakout and regime == "positive":
-        return 10
+        return 6
     if regime == "neutral":
-        return 5
+        return 3
     return 0

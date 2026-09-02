@@ -17,6 +17,8 @@ from app.alpha.gex import compute_gex
 from app.alpha.greeks import breakeven_buyer, compute_greeks, projection_matrix
 from app.alpha.market_profile import compute_market_profile
 from app.alpha.no_trade import check_no_trade, is_signal_window
+from app.alpha.news_sentiment import news_confluence_for_instrument
+from app.alpha.predictions import build_prediction
 from app.alpha.prep_report import build_prep_report
 from app.alpha.state import alpha_session
 from app.alpha.strategies import select_strategy
@@ -62,14 +64,14 @@ def _htf_bias(df: pd.DataFrame) -> tuple[str, int]:
         return "neutral", 0
     trend = _structure_trend(df)
     if trend == "bullish":
-        return "bullish", 20
+        return "bullish", 18
     if trend == "bearish":
-        return "bearish", 20
+        return "bearish", 18
     return "neutral", 0
 
 
-def _best_setup(df: pd.DataFrame) -> tuple[Any, int, int, int]:
-    """Returns setup result, structure pts, sweep pts, ob/fvg pts."""
+def _best_setup(df: pd.DataFrame) -> tuple[Any, int, int]:
+    """Returns setup result, sweep pts, ob/fvg pts."""
     sweep_pts = ob_pts = 0
     best = None
     for fn in (liquidity_sweep, fvg_retest, orb_breakout):
@@ -80,32 +82,37 @@ def _best_setup(df: pd.DataFrame) -> tuple[Any, int, int, int]:
         if r.fired and (best is None or (r.risk_reward or 0) > (best.risk_reward or 0)):
             best = r
     if best is None:
-        return None, 0, 0, 0
+        return None, 0, 0
     name = best.setup_name
     if name == "liquidity_sweep":
-        sweep_pts = 15
-        ob_pts = 8
+        sweep_pts = 12
+        ob_pts = 6
     elif name == "fvg_retest":
-        sweep_pts = 8
-        ob_pts = 15
+        sweep_pts = 6
+        ob_pts = 12
     else:
-        sweep_pts = 8
-        ob_pts = 10
-    return best, 20, sweep_pts, ob_pts
+        sweep_pts = 6
+        ob_pts = 8
+    return best, sweep_pts, ob_pts
 
 
-def evaluate_instrument(session, instrument: str, spot: float) -> dict[str, Any]:
+def evaluate_instrument(
+    session,
+    instrument: str,
+    spot: float,
+    instruments_context: dict[str, dict] | None = None,
+) -> dict[str, Any]:
     df5 = _load_df(session, instrument, "5m", 120)
     df1 = _load_df(session, instrument, "1m", 200)
     htf_bias, struct_pts = _htf_bias(df5)
-    setup, s_pts, sw_pts, ob_pts = _best_setup(df5)
+    setup, sw_pts, ob_pts = _best_setup(df5)
     profile = compute_market_profile(df1 if len(df1) >= 20 else df5)
-    prof_pts = 10 if profile["position"] in ("above_vah", "below_val") else 5 if profile["position"] != "inside_va" else 0
+    prof_pts = 8 if profile["position"] in ("above_vah", "below_val") else 4 if profile["position"] != "inside_va" else 0
 
     chain = fetch_option_chain(instrument, spot)
     analytics = chain_analytics(chain)
     gex = compute_gex(chain)
-    oi_pts = 15 if analytics.get("call_wall_strike") or analytics.get("put_wall_strike") else 0
+    oi_pts = 12 if analytics.get("call_wall_strike") or analytics.get("put_wall_strike") else 0
 
     direction = setup.direction if setup and setup.fired else htf_bias
     if direction == "neutral":
@@ -114,7 +121,15 @@ def evaluate_instrument(session, instrument: str, spot: float) -> dict[str, Any]
     pcr_pts = pcr_points(float(analytics.get("pcr") or 1), direction)
     gex_pts = gex_points(gex, direction, breakout=bool(setup and setup.fired))
 
-    conf = compute_confluence(struct_pts, sw_pts, ob_pts, oi_pts, pcr_pts, prof_pts, gex_pts)
+    ctx = instruments_context or {
+        instrument: {"htf_bias": htf_bias, "chain_analytics": analytics, "spot": spot}
+    }
+    news_pts, news_meta = news_confluence_for_instrument(instrument, direction)
+    sector_pts, sector_meta = sector_points(instrument, direction, ctx)
+
+    conf = compute_confluence(
+        struct_pts, sw_pts, ob_pts, oi_pts, pcr_pts, news_pts, sector_pts, prof_pts, gex_pts
+    )
 
     return {
         "instrument": instrument,
@@ -129,6 +144,8 @@ def evaluate_instrument(session, instrument: str, spot: float) -> dict[str, Any]
         "market_profile": profile,
         "confluence": conf,
         "direction": direction,
+        "news_meta": news_meta,
+        "sector_meta": sector_meta,
     }
 
 
@@ -190,6 +207,20 @@ def try_emit_signal(session, instrument: str, spot: float, capital_inr: float) -
     projections = projection_matrix(spot, atm, dte, iv, entry_prem, opt_type, lot_size)
     proj_up = next((p for p in projections if p["spot_move_pct"] == 1.0), {})
     proj_dn = next((p for p in projections if p["spot_move_pct"] == -1.0), {})
+    proj_up2 = next((p for p in projections if p["spot_move_pct"] == 2.0), {})
+    proj_dn2 = next((p for p in projections if p["spot_move_pct"] == -2.0), {})
+
+    news_meta = ev.get("news_meta") or {}
+    sector_meta = ev.get("sector_meta") or {}
+    prediction = build_prediction(
+        instrument,
+        ev["direction"],
+        spot,
+        setup.reason or "liquidity sweep + structure",
+        news_meta,
+        sector_meta,
+        conf.total,
+    )
 
     risk_inr = capital_inr * (conf.risk_pct / 100)
     prem_risk = max(entry_prem - stop_prem, entry_prem * 0.15)
@@ -251,6 +282,18 @@ def try_emit_signal(session, instrument: str, spot: float, capital_inr: float) -
         "proj_up_pnl": proj_up.get("pnl_per_lot_inr"),
         "proj_down_price": proj_dn.get("option_price"),
         "proj_down_pnl": proj_dn.get("pnl_per_lot_inr"),
+        "proj_up2_price": proj_up2.get("option_price"),
+        "proj_up2_pnl": proj_up2.get("pnl_per_lot_inr"),
+        "proj_down2_price": proj_dn2.get("option_price"),
+        "proj_down2_pnl": proj_dn2.get("pnl_per_lot_inr"),
+        "prediction": prediction,
+        "news_headline": news_meta.get("headline", ""),
+        "news_sentiment_score": news_meta.get("sentiment_score", 0),
+        "news_effect": news_meta.get("effect", "Neutral"),
+        "sector_name": sector_meta.get("sector", "Index"),
+        "sector_trend": sector_meta.get("sector_trend", "neutral"),
+        "sector_oi_flow": sector_meta.get("oi_flow", "Neutral"),
+        "sector_implication": sector_meta.get("implication", ""),
         "breakeven": breakeven_buyer(atm, entry_prem, opt_type),
         "max_profit_inr": round((proj_up.get("pnl_per_lot_inr") or 0) * lots, 2),
         "max_loss_inr": max_loss_inr,
@@ -284,7 +327,7 @@ def run_alpha_scan(session, spots: dict[str, float]) -> dict[str, Any]:
         if not spot or spot <= 0:
             continue
         try:
-            ev = evaluate_instrument(session, inst, spot)
+            ev = evaluate_instrument(session, inst, spot, instruments_context=instrument_data)
             instrument_data[inst] = ev
             sig = try_emit_signal(session, inst, spot, capital)
             if sig and not sig.get("skipped"):
